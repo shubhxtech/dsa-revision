@@ -272,20 +272,32 @@ struct Fenwick {
 
 ### 2.4 Sparse Table (Static RMQ)
 
+#### 🤔 Why Do You Need This?
+
+**Problem:** Given an array, answer 10⁵ queries each asking: "what is the minimum value in range [l, r]?" The array never changes.
+
+- Naïve: O(n) per query → 10¹⁰ ops total → **TLE** ❌
+- Fenwick/Segment Tree: O(log n) per query → fine, but can we do O(1)? ✅ **Yes — Sparse Table**
+
 #### 🧠 Mental Model
 
-Precompute answers for all "power-of-2 length" ranges. For any query [l, r], two overlapping power-of-2 blocks cover it — and for idempotent functions (min, max, gcd), overlap doesn't matter since `min(x, x) = x`.
+Precompute answers for **all ranges whose length is a power of 2**. For any query `[l, r]`, find the largest power-of-2 block that fits (`k = floor(log₂(r-l+1))`), and take two overlapping copies of it. Since `min` is idempotent (`min(x, x) = x`), the overlap doesn't matter.
 
 ```
 Array:  [3, 1, 4, 1, 5, 9, 2, 6]
+         0  1  2  3  4  5  6  7
 
-st[0]:  [3, 1, 4, 1, 5, 9, 2, 6]   length 1
-st[1]:  [1, 1, 1, 1, 5, 2, 2, _]   length 2
-st[2]:  [1, 1, 1, 1, 2, 2, _, _]   length 4
-st[3]:  [1, 1, _, _, _, _, _, _]   length 8
+st[k][i] = min of a[i..i+2^k-1]
 
-Query min(2..6): length=5, k=floor(log2(5))=2
-  min(st[2][2], st[2][6-4+1]) = min(1, 1) = 1
+st[0]:  [3, 1, 4, 1, 5, 9, 2, 6]   ← windows of size 1
+st[1]:  [1, 1, 1, 1, 5, 2, 2, _]   ← windows of size 2 (min of pairs)
+st[2]:  [1, 1, 1, 1, 2, 2, _, _]   ← windows of size 4
+st[3]:  [1, 1, _, _, _, _, _, _]   ← windows of size 8
+
+Query min(2..6): length=5, k=⌊log₂(5)⌋=2 (window size 4)
+  Block 1: st[2][2] = min(a[2..5]) = min(4,1,5,9) = 1
+  Block 2: st[2][6-4+1] = st[2][3] = min(a[3..6]) = min(1,5,9,2) = 1
+  Answer: min(1, 1) = 1 ✓   (overlap a[3..5] counted twice, doesn't matter for min)
 ```
 
 ```cpp
@@ -305,14 +317,20 @@ struct SparseTable {
                 st[k][i] = min(st[k-1][i], st[k-1][i + (1 << (k-1))]);
     }
 
-    int query(int l, int r) {  // inclusive, 0-indexed
+    int query(int l, int r) {  // O(1)! inclusive, 0-indexed
         int k = lg[r - l + 1];
         return min(st[k][l], st[k][r - (1 << k) + 1]);
     }
 };
+// Build: O(n log n), Query: O(1), Space: O(n log n)
+// Use when: static array (no updates), many range min/max queries
 ```
 
-> **⚠️ Trap:** Only for **idempotent** ops (min/max/gcd). Do NOT use for range sum — overlapping blocks double-count.
+> **⚠️ Trap:** Only valid for **idempotent** ops (min/max/gcd/AND/OR). **Not** for range sum — overlapping blocks would double-count. Use Fenwick/prefix sums for sum queries.
+
+**🔗 Practice Problems:**
+- [Range Minimum Query](https://cses.fi/problemset/task/1649) (CSES) — Pure Sparse Table
+- [Largest Rectangle in Histogram](https://leetcode.com/problems/largest-rectangle-in-histogram/) (LC 84) — Sparse Table for range min
 
 ---
 
@@ -426,23 +444,52 @@ vector<int> slidingMax(vector<int>& a, int k) {
 
 ### 2.7 Two Pointers / Sliding Window
 
+#### 🤔 Why Do You Need This?
+
+**Problem:** Find the **shortest subarray** with sum ≥ 7 in `[2, 3, 1, 2, 4, 3]`.
+
+- Brute force: check all O(n²) subarrays → **TLE** for n=10⁵
+- Key insight: if window `[l..r]` is valid (sum ≥ 7), making it **longer** keeps it valid; **shorter** may invalidate it. This monotonicity lets us use two pointers.
+
+```
+Array: [2, 3, 1, 2, 4, 3], target=7
+        ↑                       l=0, r grows right →
+
+r=0: sum=2, not enough
+r=1: sum=5, not enough
+r=2: sum=6, not enough
+r=3: sum=8 ✓ → try shrinking: remove a[0]=2 → sum=6 ✗. Window [0..3], len=4
+r=4: sum=10 ✓ → shrink: remove a[1]=3 → sum=7 ✓ → shrink: remove a[2]=1 → sum=6 ✗. Window [2..4], len=3
+r=5: sum=9 ✓ → shrink: remove a[3]=2 → sum=7 ✓ → shrink: remove a[4]=4 → sum=3 ✗. Window [4..5], len=2 ← best!
+
+Answer: 2
+```
+
 ```cpp
+// Pattern: find max/min window satisfying a MONOTONIC condition
 int l = 0;
 long long sum = 0;
-int best = 0;
+int best = 0;  // or INT_MAX for minimum length
 for (int r = 0; r < n; r++) {
-    sum += a[r];
-    while (sum > target) sum -= a[l++];  // shrink while invalid
-    best = max(best, r - l + 1);
+    sum += a[r];                           // expand: include a[r]
+    while (sum > target) sum -= a[l++];   // shrink: while over-budget
+    best = max(best, r - l + 1);          // record valid window size
+}
+
+// Fixed-size window (exactly k elements):
+for (int r = 0; r < n; r++) {
+    // add a[r] to window
+    if (r >= k) { /* remove a[r-k] from window */ }
+    if (r >= k - 1) { /* record answer */ }
 }
 ```
 
-> **⚠️ Trap:** Only works when window validity is **monotonic** (adding can only worsen, removing can only improve). If non-monotonic → prefix sums + hashmap.
+> **⚠️ Trap:** Two pointers requires **monotonic validity**: adding element can only worsen condition (or always improve); removing can only improve (or always worsen). If adding/removing can both help and hurt (e.g., negative numbers in subarray sum), use prefix sums + hashmap instead.
 
 **🔗 Practice Problems:**
-- [Minimum Size Subarray Sum](https://leetcode.com/problems/minimum-size-subarray-sum/) (LC 209)
-- [Longest Substring Without Repeating Characters](https://leetcode.com/problems/longest-substring-without-repeating-characters/) (LC 3)
-- [Fruit Into Baskets](https://leetcode.com/problems/fruit-into-baskets/) (LC 904)
+- [Minimum Size Subarray Sum](https://leetcode.com/problems/minimum-size-subarray-sum/) (LC 209) — Shrinkable window
+- [Longest Substring Without Repeating Characters](https://leetcode.com/problems/longest-substring-without-repeating-characters/) (LC 3) — Expandable with set
+- [Fruit Into Baskets](https://leetcode.com/problems/fruit-into-baskets/) (LC 904) — At-most-K distinct
 
 ---
 
@@ -526,50 +573,102 @@ vector<long long> dijkstra(int src, int n, vector<vector<pair<int,int>>>& adj) {
 
 ### 3.2 Bellman-Ford
 
-**Trigger:** Negative edge weights, or need to detect a **negative cycle**.
+#### 🤔 Why Do You Need This? (When Dijkstra Fails)
+
+**Problem:** Dijkstra breaks when edges have **negative weights**. Why? Its greedy assumption is: "once a node is popped from the min-heap, its distance is final." With negative edges, a later path through a negative edge could be shorter — invalidating already-finalized nodes.
+
+**Bellman-Ford** instead: relax ALL edges, repeatedly, `n-1` times. After `k` passes, it knows the shortest path using at most `k` edges. After `n-1` passes, all shortest paths (up to `n-1` edges) are found.
+
+```
+Graph: A --(-3)--> B ---(2)---> D
+       A --( 4)--> C ---(-1)---> D
+
+Dijkstra would finalize A→C=4, A→D=3 early, missing A→B→D = -3+2 = -1
+Bellman-Ford gets it right after 2 passes.
+
+Negative cycle: A→B (-5) and B→A (-3) → keeps reducing dist infinitely.
+Detect: if dist still decreases after n-1 passes → negative cycle exists.
+```
 
 ```cpp
 bool bellmanFord(int n, int src, vector<array<int,3>>& edges, vector<long long>& dist) {
     dist.assign(n, LLONG_MAX); dist[src] = 0;
+    // n-1 passes: shortest path can have at most n-1 edges
     for (int i = 0; i < n - 1; i++)
         for (auto& [u, v, w] : edges)
             if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])
                 dist[v] = dist[u] + w;
-    // n-th pass: if we can still relax, there's a negative cycle
+    // n-th pass: if any edge still relaxes → negative cycle
     for (auto& [u, v, w] : edges)
         if (dist[u] != LLONG_MAX && dist[u] + w < dist[v]) return false;
-    return true;
+    return true;  // true = no negative cycle
 }
 ```
 
-**Complexity:** O(V·E).
+**Complexity:** O(V·E) — much slower than Dijkstra O((V+E)logV). Use only when you need it.
+
+**🔗 Practice Problems:**
+- [Cheapest Flights Within K Stops](https://leetcode.com/problems/cheapest-flights-within-k-stops/) (LC 787) — Bellman-Ford with K iterations
+- [Find Negative Cycle in Graph](https://cses.fi/problemset/task/1197) (CSES)
 
 ---
 
 ### 3.3 Floyd-Warshall
 
-**Trigger:** All-pairs shortest path, N ≤ ~400–500.
+#### 🤔 Why Do You Need This?
+
+**Problem:** "Find shortest path between **every pair** of cities" — you need all-pairs answers, not just from one source.
+
+- Run Dijkstra from every node: O(V · (V+E) log V) — fine, but Floyd-Warshall is simpler to code for small N.
+- Floyd-Warshall: O(V³) — feasible for V ≤ 400–500. Also handles negative edges (but not negative cycles).
+
+**Core idea:** For each intermediate node `k`, check: "is going through `k` a shorter path from `i` to `j`?"
+
+```
+After considering k=0: dist[i][j] = min(direct path, path via node 0)
+After considering k=1: dist[i][j] = min(prev, path via node 0 or 1)
+...
+After k=n-1: dist[i][j] = true shortest path using any intermediate nodes
+
+WHY k must be outermost:
+  When we compute dist[i][j] using k as intermediate,
+  dist[i][k] and dist[k][j] must already be optimal for ALL intermediates < k.
+  If k is inner, they might not be ready yet → silent wrong answer.
+```
 
 ```cpp
-// Initialize: dist[i][i]=0, dist[i][j]=edge weight or INF
-for (int k = 0; k < n; k++)        // k MUST be outermost
+// Initialize: dist[i][i]=0, dist[i][j]=edge weight or INF, no self-loops
+for (int k = 0; k < n; k++)        // ← k MUST be outermost
     for (int i = 0; i < n; i++)
         for (int j = 0; j < n; j++)
             if (dist[i][k] < INF && dist[k][j] < INF)
                 dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]);
+// After: dist[i][j] = shortest path from i to j through any intermediates
+// Negative cycle detection: if dist[i][i] < 0 after → negative cycle
 ```
 
-> **⚠️ Trap:** `k` **must be the outermost loop** — swapping loop order silently gives wrong answers.
+> **⚠️ Trap:** `k` **must be the outermost loop** — swapping silently gives wrong answers. Also watch for overflow: `INF + INF` overflows `int`; use `long long` or check `< INF/2` before adding.
+
+**🔗 Practice Problems:**
+- [Find the City With the Smallest Number of Neighbors](https://leetcode.com/problems/find-the-city-with-the-smallest-number-of-neighbors-at-a-threshold-distance/) (LC 1334)
+- [Network Delay Time](https://leetcode.com/problems/network-delay-time/) (LC 743) — Also solvable with Floyd-Warshall
 
 ---
 
 ### 3.4 0-1 BFS
 
-**Trigger:** Edge weights only 0 or 1. O(V+E) instead of O((V+E) log V).
+#### 🤔 Why Do You Need This?
+
+**Problem:** Grid where moving in the current direction costs 0, changing direction costs 1. Find minimum cost to reach the exit.
+
+- Dijkstra works but O((V+E) log V). For binary-weight graphs we can do **O(V+E)** using a deque.
+- **Insight:** All 0-weight edges keep you at the same "distance level" — process them immediately (push to front). 1-weight edges advance to the next level (push to back). This is just BFS with a deque!
 
 ```
-0-weight edge → push to FRONT (free move, high priority)
-1-weight edge → push to BACK (normal move)
+Deque state: front = cheapest unprocessed node
+
+0-cost edge (e.g., "free move"):  push_front(neighbor)  ← process next
+1-cost edge (e.g., "costs 1"):   push_back(neighbor)   ← process later
 ```
 
 ```cpp
@@ -578,11 +677,11 @@ vector<int> dist(n, INT_MAX);
 dist[src] = 0; dq.push_back(src);
 while (!dq.empty()) {
     int u = dq.front(); dq.pop_front();
-    for (auto [v, w] : adj[u]) {
+    for (auto [v, w] : adj[u]) {         // w is 0 or 1
         if (dist[u] + w < dist[v]) {
             dist[v] = dist[u] + w;
-            if (w == 0) dq.push_front(v);
-            else        dq.push_back(v);
+            if (w == 0) dq.push_front(v);  // free move → high priority
+            else        dq.push_back(v);   // costs 1 → normal queue
         }
     }
 }
@@ -590,6 +689,7 @@ while (!dq.empty()) {
 
 **🔗 Practice Problems:**
 - [Minimum Cost to Make at Least One Valid Path in a Grid](https://leetcode.com/problems/minimum-cost-to-make-at-least-one-valid-path-in-a-grid/) (LC 1368)
+- [Minimum Number of Flips to Make Binary Grid](https://leetcode.com/problems/minimum-number-of-flips-to-make-the-binary-grid-palindrome/) — 0-1 BFS variant
 
 ---
 
@@ -646,115 +746,304 @@ while (!pq.empty()) {
 
 ### 3.6 Topological Sort — Kahn's vs DFS
 
+#### 🤔 Why Do You Need This?
+
+**Problem:** You're taking courses. Course 3 requires courses 1 and 2. Course 2 requires course 0. In what order should you take them? This is a **DAG ordering problem** — topological sort gives you a valid linear ordering of nodes such that all edges point forward.
+
+```mermaid
+graph LR
+    0 --> 2
+    1 --> 2
+    2 --> 3
 ```
-Kahn's (BFS-based):
-  Track in-degrees. Push 0-indegree nodes into queue.
-  Process node → reduce neighbors' in-degrees.
-  If processed count < n → cycle exists!
-```
+
+Valid topological order: `0, 1, 2, 3` or `1, 0, 2, 3`
+
+**Kahn's Algorithm (BFS, indegree-based):**
+- A node with indegree 0 has no prerequisites → safe to process first.
+- After processing, reduce neighbors' indegrees. If any reach 0, add them to queue.
+- If we can't process all nodes → a cycle exists (no valid ordering possible).
 
 ```cpp
 vector<int> indeg(n, 0);
-for (auto& [u, v] : edges) indeg[v]++;
+for (auto& [u, v] : edges) indeg[v]++;  // count prerequisites for each node
 queue<int> q;
-for (int i = 0; i < n; i++) if (indeg[i] == 0) q.push(i);
+for (int i = 0; i < n; i++) if (indeg[i] == 0) q.push(i);  // start with no-prereq nodes
 vector<int> order;
 while (!q.empty()) {
     int u = q.front(); q.pop();
     order.push_back(u);
-    for (int v : adj[u]) if (--indeg[v] == 0) q.push(v);
+    for (int v : adj[u])
+        if (--indeg[v] == 0) q.push(v);  // prerequisite satisfied!
 }
-bool hasCycle = (order.size() != n);
+bool hasCycle = ((int)order.size() != n);  // not all processed → cycle
 ```
 
+**DFS-based toposort** — push to stack on post-order exit, then reverse:
+```cpp
+vector<int> color(n, 0);  // 0=unvisited, 1=in-stack(gray), 2=done
+vector<int> order;
+bool hasCycle = false;
+function<void(int)> dfs = [&](int u) {
+    color[u] = 1;  // mark as in current DFS path
+    for (int v : adj[u]) {
+        if (color[v] == 1) { hasCycle = true; return; }  // back edge → cycle
+        if (color[v] == 0) dfs(v);
+    }
+    color[u] = 2;
+    order.push_back(u);  // push AFTER all descendants processed
+};
+for (int i = 0; i < n; i++) if (color[i] == 0) dfs(i);
+reverse(order.begin(), order.end());  // reverse post-order = topological order
+```
+
+| | Kahn's (BFS) | DFS-based |
+|---|---|---|
+| Cycle detection | Easy: check `order.size() != n` | Track gray nodes |
+| When to use | General, explicit ordering needed | Already doing DFS (e.g. DP on DAG) |
+
 **🔗 Practice Problems:**
-- [Course Schedule](https://leetcode.com/problems/course-schedule/) (LC 207)
-- [Course Schedule II](https://leetcode.com/problems/course-schedule-ii/) (LC 210)
-- [Alien Dictionary](https://leetcode.com/problems/alien-dictionary/) (LC 269)
+- [Course Schedule](https://leetcode.com/problems/course-schedule/) (LC 207) — Detect cycle
+- [Course Schedule II](https://leetcode.com/problems/course-schedule-ii/) (LC 210) — Return ordering
+- [Alien Dictionary](https://leetcode.com/problems/alien-dictionary/) (LC 269) — Build graph from constraints
 
 ---
 
 ### 3.7 Cycle Detection
 
-- **Undirected:** DSU (edge connecting two nodes in same component = cycle) OR DFS with parent-tracking.
-- **Directed:** DFS with 3 colors — white/gray/black. Back-edge to a **gray** node = cycle.
+#### 🤔 When and How
+
+**Undirected graph:**
+- **DSU approach:** Try to unite every edge. If both endpoints already share a root → this edge creates a cycle.
+- **DFS approach:** Track the parent of each node. If you visit a neighbor that's already visited AND it's not your parent → cycle.
+
+**Directed graph:**
+- **3-color DFS:** White = unvisited, Gray = currently in the DFS call stack (being explored), Black = fully processed.
+- A **back edge** (visiting a gray node) = cycle. Visiting a black node is fine — it just means another path leads there.
+
+```
+Why gray matters: Gray = "we're currently exploring a path through this node"
+If we see it again, we've looped back to a node in our current path → cycle!
+
+Example directed cycle: A→B→C→A
+  DFS from A: A=gray, explore B: B=gray, explore C: C=gray
+  C tries to visit A: A is gray! → CYCLE detected.
+```
+
+```cpp
+// Directed cycle detection via 3-color DFS
+vector<int> color(n, 0);  // 0=white, 1=gray, 2=black
+bool hasCycle = false;
+function<void(int)> dfs = [&](int u) {
+    color[u] = 1;  // entering: mark gray
+    for (int v : adj[u]) {
+        if (color[v] == 1) { hasCycle = true; return; }  // back edge!
+        if (color[v] == 0) dfs(v);
+    }
+    color[u] = 2;  // done: mark black
+};
+```
+
+**🔗 Practice Problems:**
+- [Find Eventual Safe States](https://leetcode.com/problems/find-eventual-safe-states/) (LC 802) — 3-color DFS on directed graph
+- [Redundant Connection](https://leetcode.com/problems/redundant-connection/) (LC 684) — DSU cycle detection
 
 ---
 
 ### 3.8 LCA — Binary Lifting
 
-#### 🧠 Mental Model
+#### 🤔 Why Do You Need This?
 
-Precompute ancestors at power-of-2 jumps (like "jumping in halves" up the tree). To find LCA, equalize depths, then binary-jump both nodes up together until they meet.
+**Problem:** Given a tree with 10⁵ nodes and 10⁵ queries asking "what is the lowest common ancestor of nodes u and v?"
+
+- Naïve: walk both nodes up to root, find first common → O(depth) per query → O(n) worst case → **TLE**
+- Binary Lifting: O(log n) per query after O(n log n) preprocessing.
+
+**Idea:** Precompute `up[k][v]` = the 2ᵏ-th ancestor of node v. So `up[0][v]` = parent, `up[1][v]` = grandparent, `up[2][v]` = great-great-grandparent, etc. To jump 13 steps up = jump 8 + 4 + 1 steps (binary representation of 13).
+
+```mermaid
+graph TD
+    1 --> 2
+    1 --> 3
+    2 --> 4
+    2 --> 5
+```
 
 ```
-Tree:    1
-        / \
-       2   3
-      / \
-     4   5
+up[0]: parent of each node
+  up[0][4]=2, up[0][5]=2, up[0][2]=1, up[0][3]=1, up[0][1]=1(root→itself)
 
-up[0][4]=2, up[0][2]=1, up[0][1]=1 (root points to itself)
-up[1][4] = up[0][up[0][4]] = up[0][2] = 1
+up[1]: 2nd ancestor (parent of parent)
+  up[1][4] = up[0][up[0][4]] = up[0][2] = 1
+  up[1][5] = up[0][up[0][5]] = up[0][2] = 1
 
-LCA(4, 3): depth[4]=2, depth[3]=1
-  Lift 4 by 1: 4 → 2 (now both at depth 1)
-  2 != 3, try k=LOG-1..0: up[0][2]=1, up[0][3]=1 → equal → LCA = up[0][2] = 1 ✓
+LCA(4, 3):
+  depth[4]=2, depth[3]=1 → lift 4 by 1: 4→2
+  Now both at depth 1: u=2, v=3
+  up[0][2]=1, up[0][3]=1 → same → LCA = up[0][2] = 1 ✓
 ```
 
 ```cpp
-int LOG = 20;
+const int LOG = 20;  // supports trees up to 2^20 = ~1M nodes
 vector<vector<int>> up(LOG, vector<int>(n, 0));
 vector<int> depth(n, 0);
-// Fill up[0][v] = parent[v] via DFS first
+
+// Step 1: fill direct parents via DFS
+function<void(int,int)> dfs = [&](int u, int p) {
+    up[0][u] = p;  // direct parent (root's parent = itself)
+    for (int v : adj[u]) if (v != p) {
+        depth[v] = depth[u] + 1;
+        dfs(v, u);
+    }
+};
+dfs(0, 0);
+
+// Step 2: build binary lifting table
 for (int k = 1; k < LOG; k++)
     for (int v = 0; v < n; v++)
-        up[k][v] = up[k-1][up[k-1][v]];
+        up[k][v] = up[k-1][up[k-1][v]];  // 2^k-th = (2^(k-1))-th of (2^(k-1))-th
 
-int lca(int u, int v) {
-    if (depth[u] < depth[v]) swap(u, v);
+// Step 3: LCA query
+auto lca = [&](int u, int v) -> int {
+    if (depth[u] < depth[v]) swap(u, v);  // ensure u is deeper
+    // Lift u to same depth as v
     int diff = depth[u] - depth[v];
-    for (int k = 0; k < LOG; k++) if (diff & (1 << k)) u = up[k][u];
-    if (u == v) return u;
-    for (int k = LOG - 1; k >= 0; k--)
+    for (int k = 0; k < LOG; k++) if (diff >> k & 1) u = up[k][u];
+    if (u == v) return u;  // one was ancestor of other
+    // Binary-lift both until just below LCA
+    for (int k = LOG-1; k >= 0; k--)
         if (up[k][u] != up[k][v]) { u = up[k][u]; v = up[k][v]; }
-    return up[0][u];
-}
+    return up[0][u];  // one step above = LCA
+};
 ```
 
 **🔗 Practice Problems:**
-- [Lowest Common Ancestor of a Binary Tree](https://leetcode.com/problems/lowest-common-ancestor-of-a-binary-tree/) (LC 236)
-- [Kth Ancestor of a Tree Node](https://leetcode.com/problems/kth-ancestor-of-a-tree-node/) (LC 1483)
+- [Kth Ancestor of a Tree Node](https://leetcode.com/problems/kth-ancestor-of-a-tree-node/) (LC 1483) — Binary lifting directly
+- [LCA of Deepest Leaves](https://leetcode.com/problems/lowest-common-ancestor-of-deepest-leaves/) (LC 1123)
+- [Distance Between Two Nodes in Tree](https://cses.fi/problemset/task/1132) (CSES) — dist(u,v) = depth[u]+depth[v]-2*depth[LCA(u,v)]
 
 ---
 
 ### 3.9 Euler Tour (Flatten Tree → Array)
 
-**Trigger:** Subtree sum/count queries → convert to range queries on `[tin[v], tout[v]]`.
+#### 🤔 Why Do You Need This?
+
+**Problem:** Given a tree with 10⁵ nodes, handle 10⁵ queries: "add value X to all nodes in the subtree of node v" and "what is the sum of values in the subtree of node w?"
+
+- Naïve: DFS the subtree for every query → O(n) per query → **TLE**
+- **Euler Tour trick:** Flatten the tree into an array using DFS. The subtree of any node `v` becomes a **contiguous range** `[tin[v], tout[v]]` in this array. Then use Fenwick/Segment Tree on the array!
+
+```mermaid
+graph TD
+    1 --> 2
+    1 --> 3
+    2 --> 4
+    2 --> 5
+```
 
 ```
-Tree: 1 → {2, 3},  2 → {4, 5}
+DFS traversal (record entry time):
+  Visit 1: tin[1]=0
+    Visit 2: tin[2]=1
+      Visit 4: tin[4]=2, tout[4]=2  (leaf)
+      Visit 5: tin[5]=3, tout[5]=3  (leaf)
+    tout[2]=3  (all of subtree(2) occupies positions 1..3)
+    Visit 3: tin[3]=4, tout[3]=4   (leaf)
+  tout[1]=4
 
-DFS in: 1(0), 2(1), 4(2), 5(3), 3(4)
-tin[2]=1, tout[2]=3 → subtree of 2 = positions [1..3] = {2, 4, 5} ✓
+Flattened array positions:
+  pos: 0    1    2    3    4
+  node: 1    2    4    5    3
+
+Subtree of node 2 = positions [tin[2]..tout[2]] = [1..3] = {2, 4, 5} ✓
+Subtree of node 1 = positions [0..4] = all nodes ✓
+
+"Add 5 to subtree(2)" → range update [1..3] on the flat array
+"Sum of subtree(2)"   → range query  [1..3] on the flat array
 ```
 
 ```cpp
 int timer = 0;
 vector<int> tin(n), tout(n);
+
 void dfs(int u, int p) {
-    tin[u] = timer++;
-    for (int v : adj[u]) if (v != p) dfs(v, u);
-    tout[u] = timer - 1;
+    tin[u] = timer++;          // record entry time (position in flat array)
+    for (int v : adj[u])
+        if (v != p) dfs(v, u);
+    tout[u] = timer - 1;       // record exit time (last position in subtree)
 }
-// v is ancestor of u ⟺ tin[v] <= tin[u] && tout[u] <= tout[v]
+
+// After dfs: subtree of v = flat array range [tin[v], tout[v]]
+// This means any subtree query becomes a range query on the flat array!
+
+// To check if v is ancestor of u:
+bool isAncestor = (tin[v] <= tin[u] && tout[u] <= tout[v]);
+
+// Usage: build Fenwick/SegTree over the flat array,
+// subtree queries become range [tin[v], tout[v]]
 ```
+
+**🔗 Practice Problems:**
+- [Subtree Queries](https://cses.fi/problemset/task/1137) (CSES) — Direct Euler Tour + Fenwick
+- [Path Queries](https://cses.fi/problemset/task/1138) (CSES) — Euler Tour variant
+- [Count Nodes Equal to Average of Subtree](https://leetcode.com/problems/count-nodes-equal-to-average-of-subtree/) (LC 2265) — Subtree concept
 
 ---
 
-### 3.10 SCC — Kosaraju's (brief)
+### 3.10 SCC — Kosaraju's Algorithm
 
-Two DFS passes: (1) DFS original, push to stack on finish; (2) DFS transposed graph in stack-pop order — each DFS tree = one SCC. O(V+E). Condenses graph into a DAG.
+#### 🤔 Why Do You Need This?
+
+**Problem:** In a directed graph of cities with one-way roads, find groups of cities where you can travel between any two cities (directly or indirectly). These are **Strongly Connected Components (SCCs)**.
+
+**Application:** Condense a directed graph into a DAG of SCCs, making cyclic dependency problems tractable (2-SAT, finding which components can reach which).
+
+```mermaid
+graph LR
+    A --> B
+    B --> C
+    C --> A
+    C --> D
+    D --> E
+    E --> D
+```
+
+```
+SCCs: {A, B, C}  and  {D, E}  and  {F} (if isolated)
+Condensed DAG: SCC1 → SCC2
+```
+
+**Kosaraju's Algorithm (2 DFS passes):**
+1. DFS on original graph, push nodes to stack in **finish order** (later-finishing = depends on more nodes)
+2. DFS on the **transposed** (reversed) graph, in stack-pop order. Each DFS tree is one SCC.
+
+```cpp
+// Kosaraju's SCC
+vector<int> order;  // finish order
+vector<bool> visited(n, false);
+function<void(int)> dfs1 = [&](int u) {
+    visited[u] = true;
+    for (int v : adj[u]) if (!visited[v]) dfs1(v);
+    order.push_back(u);  // push on finish
+};
+for (int i = 0; i < n; i++) if (!visited[i]) dfs1(i);
+
+vector<int> comp(n, -1);
+int numSCC = 0;
+function<void(int, int)> dfs2 = [&](int u, int c) {
+    comp[u] = c;
+    for (int v : radj[u]) if (comp[v] == -1) dfs2(v, c);  // radj = transposed graph
+};
+for (int i = n - 1; i >= 0; i--) {  // process in reverse finish order
+    if (comp[order[i]] == -1) dfs2(order[i], numSCC++);
+}
+// comp[u] = which SCC node u belongs to
+// numSCC = total number of SCCs
+```
+
+**🔗 Practice Problems:**
+- [Critical Connections in a Network](https://leetcode.com/problems/critical-connections-in-a-network/) (LC 1192) — Bridge finding (related)
+- [Strongly Connected Components](https://cses.fi/problemset/task/1686) (CSES) — Direct SCC
 
 ---
 
@@ -764,164 +1053,348 @@ Two DFS passes: (1) DFS original, push to stack on finish; (2) DFS transposed gr
 
 ### 4.1 Bitmask DP
 
-#### 🧠 Mental Model
+#### 🤔 Why Do You Need This?
 
-Use an integer's bits to represent a **subset of items**. `mask = 0b1010` means items 1 and 3 included (0-indexed). Add item `v` to mask: `mask | (1 << v)`. Check if item `v` in mask: `mask & (1 << v)`.
+**Problem:** You have 4 tasks and 4 workers. Each worker has a different cost for each task. Assign tasks to workers (one each) to minimize total cost.
 
-**Trigger:** N ≤ ~20, "visit all items" (TSP-style), subset partitioning.
+- State: which tasks are already assigned?
+- With 20 items, there are 2²⁰ ≈ 1M subsets — manageable. With 21+, it explodes.
+- **Represent the set of assigned tasks as a bitmask integer**: bit `i` is set if task `i` is done.
 
-```cpp
-// TSP: dp[mask][u] = min cost to visit exactly cities in `mask`, ending at u
-vector<vector<int>> dp(1 << n, vector<int>(n, INF));
-dp[1][0] = 0;  // start at city 0
-for (int mask = 1; mask < (1 << n); mask++)
-    for (int u = 0; u < n; u++) {
-        if (!(mask & (1 << u)) || dp[mask][u] == INF) continue;
-        for (int v = 0; v < n; v++) {
-            if (mask & (1 << v)) continue;
-            int nmask = mask | (1 << v);
-            dp[nmask][v] = min(dp[nmask][v], dp[mask][u] + cost[u][v]);
-        }
-    }
-// Complexity: O(2^n * n^2)
+```
+mask = 0b0110 means tasks 1 and 2 are done (0-indexed)
+Add task 3: mask | (1 << 3) = 0b1110
+Check if task 1 is done: mask & (1 << 1) = non-zero → yes
+Remove task 1: mask & ~(1 << 1) = 0b0100
 ```
 
-**Submask enumeration** O(3^n total:
+**TSP (Traveling Salesman):** Visit all n cities exactly once, return home, minimize cost.
+
+```
+dp[mask][u] = min cost to visit exactly the cities in `mask`, currently at city u
+
+Transition: for each unvisited city v:
+  dp[mask | (1<<v)][v] = min(dp[mask|(1<<v)][v], dp[mask][u] + cost[u][v])
+
+Base: dp[1<<src][src] = 0
+Answer: min over all u of dp[(1<<n)-1][u] + cost[u][0]
+```
+
+```cpp
+// TSP template
+vector<vector<int>> dp(1 << n, vector<int>(n, INF));
+dp[1][0] = 0;  // visited={city 0}, currently at city 0
+for (int mask = 1; mask < (1 << n); mask++)
+    for (int u = 0; u < n; u++) {
+        if (!(mask & (1 << u))) continue;  // u not in mask — skip
+        if (dp[mask][u] == INF) continue;
+        for (int v = 0; v < n; v++) {
+            if (mask & (1 << v)) continue;  // v already visited — skip
+            dp[mask | (1 << v)][v] = min(dp[mask | (1 << v)][v],
+                                         dp[mask][u] + cost[u][v]);
+        }
+    }
+// Complexity: O(2^n * n^2). Feasible for n ≤ 20.
+```
+
+**Submask enumeration** — iterate all subsets of a mask in O(3ⁿ) total:
 ```cpp
 for (int sub = mask; sub > 0; sub = (sub - 1) & mask) {
-    // process subset sub of mask
+    // sub is a non-empty subset of mask
+    // (sub - 1) & mask removes the lowest set bit within mask
 }
+// Use case: "for each way to split mask into two groups"
 ```
 
 **🔗 Practice Problems:**
-- [Shortest Path Visiting All Nodes](https://leetcode.com/problems/shortest-path-visiting-all-nodes/) (LC 847)
+- [Shortest Path Visiting All Nodes](https://leetcode.com/problems/shortest-path-visiting-all-nodes/) (LC 847) — BFS + bitmask
 - [Minimum Number of Work Sessions to Finish the Tasks](https://leetcode.com/problems/minimum-number-of-work-sessions-to-finish-the-tasks/) (LC 1986)
+- [Matching Tasks to Workers](https://leetcode.com/problems/maximum-score-words-formed-by-letters/) (LC 1255) — Subset enumeration
 
 ---
 
 ### 4.2 Digit DP
 
-#### 🧠 Mental Model
+#### 🤔 Why Do You Need This?
 
-Count numbers in [0, N] satisfying a digit property. Build the number digit by digit. Key flag: **`tight`** — are we still bounded by N?
+**Problem:** Count numbers in [1, N] whose digit sum is divisible by 7. N can be up to 10¹⁸.
+
+- You can't iterate through all numbers — 10¹⁸ is too large.
+- **Digit DP:** Build the number digit by digit (left to right). At each position, track relevant "state" (here: digit sum mod 7). Use memoization.
+
+**The `tight` flag is the key insight:**
+- If you've placed digits exactly matching N's prefix so far → you're "tight": the next digit can be at most N's next digit.
+- If you've placed a smaller digit at any point → you're "free": remaining digits can be 0–9 without restriction.
 
 ```
-Count numbers <= 325 with digit sum <= 7:
-  At position 0, if we pick digit < 3, tight=false → digits 0..9 free afterward.
-  If we pick digit = 3, tight=true → next digit bounded by 2.
-  Memoize (pos, state) only when tight=false (tight=true states are unique to N's prefix).
+N = 325, count numbers with digit sum ≤ 7
+
+Position 0: digits[0]=3
+  If we place 0,1,2 → tight=false (we're below 325 no matter what follows)
+  If we place 3     → tight=true  (we must watch digits[1]=2 next)
+
+Position 1 (if tight): digits[1]=2
+  If we place 0,1   → tight=false
+  If we place 2     → tight=true
+...
+
+Key: memoize (pos, digitSumSoFar) ONLY when tight=false.
+When tight=true, the state is unique to N's exact prefix — can't reuse.
 ```
 
 ```cpp
-long long dp[20][2][MAXSTATE];
+string num = to_string(N);  // convert to digits
+int n = num.size();
+int dp[20][maxState];       // dp[pos][state] when NOT tight
 memset(dp, -1, sizeof dp);
-function<long long(int,bool,int)> solve = [&](int pos, bool tight, int state) -> long long {
-    if (pos == (int)digits.size()) return isValid(state);
-    if (!tight && dp[pos][tight][state] != -1) return dp[pos][tight][state];
-    int limit = tight ? digits[pos] : 9;
+
+function<long long(int, bool, int)> solve =
+    [&](int pos, bool tight, int state) -> long long {
+    if (pos == n) return isValid(state) ? 1 : 0;  // base case
+    if (!tight && dp[pos][state] != -1) return dp[pos][state];  // cached
+
+    int limit = tight ? (num[pos] - '0') : 9;  // how far can we go?
     long long res = 0;
-    for (int d = 0; d <= limit; d++)
-        res += solve(pos + 1, tight && (d == limit), transition(state, d));
-    if (!tight) dp[pos][tight][state] = res;
+    for (int d = 0; d <= limit; d++) {
+        bool newTight = tight && (d == limit);  // still tight if d==limit
+        int newState = transition(state, d);    // update tracked quantity
+        res += solve(pos + 1, newTight, newState);
+    }
+    if (!tight) dp[pos][state] = res;  // only cache when NOT tight
     return res;
 };
+long long answer = solve(0, true, 0);  // start tight, empty state
 ```
 
-> **⚠️ Trap:** Do NOT memoize when `tight == true`.
+> **⚠️ Trap:** **Never memoize when `tight == true`** — that result is specific to N's exact prefix and can't be reused for other numbers.
 
 **🔗 Practice Problems:**
-- [Count Numbers with Unique Digits](https://leetcode.com/problems/count-numbers-with-unique-digits/) (LC 357)
+- [Count Numbers with Unique Digits](https://leetcode.com/problems/count-numbers-with-unique-digits/) (LC 357) — Warm-up
 - [Numbers At Most N Given Digit Set](https://leetcode.com/problems/numbers-at-most-n-given-digit-set/) (LC 902)
+- [Count Integers With Even Digit Sum](https://leetcode.com/problems/count-integers-with-even-digit-sum/) (LC 2180) — Simple digit DP
 
 ---
 
 ### 4.3 LIS in O(n log n) — Patience Sorting
 
-#### 🧠 Mental Model
+#### 🤔 Why Do You Need This?
 
-Place cards into piles: each card goes on the leftmost pile whose top card is >= current card. Number of piles = LIS length.
+**Problem:** Find the longest increasing subsequence (LIS) of `[3, 1, 4, 1, 5, 9, 2, 6]`.
 
+- The O(n²) DP is easy: `dp[i] = max(dp[j]+1) for all j<i where a[j]<a[i]`. Fine for n≤5000, but **TLE** for n=10⁵.
+- **Patience Sorting** does it in O(n log n): binary search to find where each element fits.
+
+**Mental model — card piles:**
 ```
+Pile each card on the leftmost pile whose top is >= current card.
+If no such pile, start a new one. Number of piles = LIS length.
+
 Sequence: [3, 1, 4, 1, 5, 9, 2, 6]
-tails grows as:
-  [3] → [1] → [1,4] → [1,1] → wait...
-  tails[i] = smallest tail for LIS of length i+1
 
-After all: tails.size() = LIS length
+3: new pile      → piles: [3]
+1: 1<3 → replaces top of pile 1  → piles: [1]
+4: 4>1 → new pile → piles: [1][4]
+1: 1<=1 → replaces top of pile 1 → piles: [1][4]   (1 replaces 1)
+5: 5>4 → new pile → piles: [1][4][5]
+9: 9>5 → new pile → piles: [1][4][5][9]
+2: 2 fits on pile with top 4 → piles: [1][2][5][9]
+6: 6 fits on pile with top 9 → piles: [1][2][5][6]
+
+4 piles → LIS length = 4
+Actual LIS: [1, 4, 5, 6] or [1, 2, 5, 6] etc.
 ```
+
+The `tails` array maintains the minimum possible tail for each pile length:
 
 ```cpp
-vector<int> tails;
+vector<int> tails;  // tails[i] = smallest tail value of LIS of length i+1
 for (int x : a) {
-    auto it = lower_bound(tails.begin(), tails.end(), x);  // strictly increasing
-    if (it == tails.end()) tails.push_back(x);
-    else *it = x;
+    // Find leftmost pile whose top >= x:
+    auto it = lower_bound(tails.begin(), tails.end(), x);
+    if (it == tails.end()) tails.push_back(x);  // x is larger than all tops → new pile
+    else *it = x;                                // x replaces this pile's top
 }
 int lisLength = tails.size();
-// For non-decreasing LIS: use upper_bound instead of lower_bound
+
+// For NON-DECREASING LIS (allow equal elements, i.e., a[j] <= a[i]):
+// Use upper_bound instead of lower_bound
+auto it = upper_bound(tails.begin(), tails.end(), x);
 ```
 
-> **⚠️ Trap:** `lower_bound` = strictly increasing LIS. `upper_bound` = non-decreasing. This single swap is the most common LIS bug.
+> **⚠️ Trap:** `lower_bound` gives **strictly increasing** LIS. `upper_bound` gives **non-decreasing**. This single swap is the #1 LIS bug. Also: `tails` is NOT the actual LIS — just a tool to find its **length**. To reconstruct the actual LIS, track parent pointers.
 
 **🔗 Practice Problems:**
-- [Longest Increasing Subsequence](https://leetcode.com/problems/longest-increasing-subsequence/) (LC 300)
-- [Russian Doll Envelopes](https://leetcode.com/problems/russian-doll-envelopes/) (LC 354) — 2D LIS
+- [Longest Increasing Subsequence](https://leetcode.com/problems/longest-increasing-subsequence/) (LC 300) — The classic
+- [Russian Doll Envelopes](https://leetcode.com/problems/russian-doll-envelopes/) (LC 354) — 2D LIS with a sort trick
+- [Number of Longest Increasing Subsequence](https://leetcode.com/problems/number-of-longest-increasing-subsequence/) (LC 673)
 
 ---
 
 ### 4.4 Tree DP
 
+#### 🤔 Why Do You Need This?
+
+**Problem:** Given a tree where each node has a value, find the maximum sum of values you can collect such that no two selected nodes are adjacent (parent-child pairs can't both be selected). This is [House Robber III (LC 337)](https://leetcode.com/problems/house-robber-iii/).
+
+**Pattern:** DFS post-order — process children first, combine results at parent.
+
+```mermaid
+graph TD
+    1["Node 1, val=3"] --> 2["Node 2, val=2"]
+    1 --> 3["Node 3, val=1"]
+    2 --> 4["Node 4, val=5"]
+    2 --> 5["Node 5, val=4"]
+```
+
+```
+For each node u, track two states:
+  take[u] = max sum if we SELECT node u
+  skip[u] = max sum if we SKIP node u
+
+Leaf node 4 (val=5): take=5, skip=0
+Leaf node 5 (val=4): take=4, skip=0
+Node 2 (val=2):
+  take[2] = 2 + skip[4] + skip[5] = 2 + 0 + 0 = 2  (took 2, must skip children)
+  skip[2] = max(take[4],skip[4]) + max(take[5],skip[5]) = 5 + 4 = 9  (skip 2, children free)
+Node 3 (val=1): take=1, skip=0
+Node 1 (val=3):
+  take[1] = 3 + skip[2] + skip[3] = 3 + 9 + 0 = 12
+  skip[1] = max(take[2],skip[2]) + max(take[3],skip[3]) = 9 + 1 = 10
+Answer: max(12, 10) = 12 → select {1, 4, 5}
+```
+
 ```cpp
-// Max weight independent set on tree
-pair<long long,long long> dfs(int u, int p) {  // {take u, skip u}
+pair<long long,long long> dfs(int u, int p) {  // returns {take u, skip u}
     long long take = weight[u], skip = 0;
     for (int v : adj[u]) if (v != p) {
         auto [t, s] = dfs(v, u);
-        take += s;           // if take u, children must be skipped
-        skip += max(t, s);   // if skip u, children can be taken or skipped
+        take += s;            // took u → must skip all children
+        skip += max(t, s);    // skipped u → children can be taken or skipped
     }
     return {take, skip};
 }
+auto [t, s] = dfs(root, -1);
+long long answer = max(t, s);
+```
+
+**Tree DP for diameter:**
+```cpp
+// At each node, diameter passing through u = left_height + right_height + 2
+// Return: max height of subtree rooted at u
+int ans = 0;
+function<int(int,int)> height = [&](int u, int p) -> int {
+    int h1 = 0, h2 = 0;  // two longest branches
+    for (int v : adj[u]) if (v != p) {
+        int h = height(v, u) + 1;
+        if (h > h1) { h2 = h1; h1 = h; }
+        else if (h > h2) h2 = h;
+    }
+    ans = max(ans, h1 + h2);  // diameter through u
+    return h1;  // return longest branch
+};
 ```
 
 **🔗 Practice Problems:**
-- [House Robber III](https://leetcode.com/problems/house-robber-iii/) (LC 337)
-- [Binary Tree Maximum Path Sum](https://leetcode.com/problems/binary-tree-maximum-path-sum/) (LC 124)
+- [House Robber III](https://leetcode.com/problems/house-robber-iii/) (LC 337) — Exactly the pattern above
+- [Binary Tree Maximum Path Sum](https://leetcode.com/problems/binary-tree-maximum-path-sum/) (LC 124) — Diameter variant
+- [Diameter of Binary Tree](https://leetcode.com/problems/diameter-of-binary-tree/) (LC 543)
 
 ---
 
 ### 4.5 Knapsack Variants
 
-| Variant | Inner loop direction | Why |
+#### 🤔 Why the Loop Direction Matters
+
+**Problem:** Items with weights and values, knapsack of capacity W. Maximize total value.
+
+```
+0/1 Knapsack (each item used at most once):
+  dp[w] = max value with capacity w
+
+  Why descending inner loop?
+  If we go ascending: dp[5] uses dp[3] which may already include item i
+    → item i gets used twice! (wrong)
+  If we go descending: dp[5] uses dp[3] from BEFORE item i was considered
+    → each item used at most once ✓
+
+Unbounded Knapsack (each item usable multiple times, e.g. Coin Change):
+  Why ascending?
+  dp[5] uses dp[3] AFTER item i was added → item can be reused ✓
+```
+
+```cpp
+// 0/1 Knapsack: each item {weight[i], value[i]} used at most once
+vector<int> dp(W + 1, 0);
+for (int i = 0; i < n; i++)
+    for (int w = W; w >= weight[i]; w--)   // DESCENDING: prevents reuse
+        dp[w] = max(dp[w], dp[w - weight[i]] + value[i]);
+
+// Unbounded Knapsack: item can be used any number of times
+vector<int> dp(W + 1, INF); dp[0] = 0;
+for (int i = 0; i < n; i++)
+    for (int w = weight[i]; w <= W; w++)   // ASCENDING: allows reuse
+        dp[w] = min(dp[w], dp[w - weight[i]] + 1);  // (e.g. coin change)
+
+// Boolean Knapsack (subset sum):
+vector<bool> dp(W + 1, false); dp[0] = true;
+for (int x : nums)
+    for (int w = W; w >= x; w--)          // DESCENDING: each num used once
+        dp[w] = dp[w] || dp[w - x];
+```
+
+| Variant | Inner loop | Why |
 |---|---|---|
-| 0/1 knapsack | Capacity **descending** | Prevents reusing same item |
-| Unbounded knapsack | Capacity **ascending** | Allows reusing items |
-| Bounded (count Ci) | Binary-split items, then 0/1 | Reduces to 0/1 knapsack |
+| 0/1 (use each once) | Capacity **descending** | Old values before current item |
+| Unbounded (use freely) | Capacity **ascending** | Fresh values allow reuse |
+| Bounded (count Cᵢ) | Binary-split into O(log Cᵢ) sub-items, then 0/1 | Reduces to 0/1 |
 
 **🔗 Practice Problems:**
+- [Partition Equal Subset Sum](https://leetcode.com/problems/partition-equal-subset-sum/) (LC 416) — Boolean 0/1 knapsack
 - [Coin Change](https://leetcode.com/problems/coin-change/) (LC 322) — Unbounded
-- [Partition Equal Subset Sum](https://leetcode.com/problems/partition-equal-subset-sum/) (LC 416) — 0/1
+- [Coin Change II](https://leetcode.com/problems/coin-change-ii/) (LC 518) — Count ways, unbounded
+- [Target Sum](https://leetcode.com/problems/target-sum/) (LC 494) — 0/1 knapsack counting
 
 ---
 
 ### 4.6 Interval DP
 
-**Trigger:** Merge/partition a sequence into optimal cost — matrix chain, burst balloons, palindrome partitioning.
+#### 🤔 Why Do You Need This?
+
+**Problem:** [Burst Balloons (LC 312)](https://leetcode.com/problems/burst-balloons/). You have balloons with values. When you burst balloon `i`, you earn `val[i-1] * val[i] * val[i+1]`. Burst all balloons to maximize total coins.
+
+**Why interval DP?** The catch is: bursting balloon `i` changes who the neighbors of remaining balloons are. This makes greedy/simple DP tricky.
+
+**Key insight:** Instead of thinking "what do I burst first?", think **"what do I burst LAST?"** in a range `[i, j]`. If balloon `k` is the last to be burst in `[i, j]`, its neighbors are fixed (the boundaries): `val[i-1] * val[k] * val[j+1]`. Everything to its left and right was already burst.
+
+```
+dp[i][j] = max coins from bursting all balloons in range [i, j]
+
+For each possible last balloon k in [i..j]:
+  dp[i][j] = max(dp[i][j], dp[i][k-1] + dp[k+1][j] + val[i-1]*val[k]*val[j+1])
+
+Base: dp[i][i] = val[i-1]*val[i]*val[i+1] (only one balloon, it IS the last)
+```
 
 ```cpp
-for (int len = 2; len <= n; len++)
+// General Interval DP template
+// MUST iterate by INCREASING LENGTH (smaller subproblems first)
+for (int len = 1; len <= n; len++)          // length of interval
     for (int i = 0; i + len - 1 < n; i++) {
         int j = i + len - 1;
-        for (int k = i; k < j; k++)
-            dp[i][j] = min(dp[i][j], dp[i][k] + dp[k+1][j] + cost(i, k, j));
+        for (int k = i; k <= j; k++) {      // try each possible split/last point
+            dp[i][j] = max(dp[i][j],
+                dp[i][k-1] + dp[k+1][j] + cost(i, k, j));
+        }
     }
-// Complexity: O(n^3). Always iterate by INCREASING LENGTH.
+// WHY increasing length? dp[i][j] uses dp[i][k-1] and dp[k+1][j],
+// both shorter intervals. They MUST be computed before [i,j].
+// Complexity: O(n³)
 ```
 
 **🔗 Practice Problems:**
-- [Burst Balloons](https://leetcode.com/problems/burst-balloons/) (LC 312)
-- [Strange Printer](https://leetcode.com/problems/strange-printer/) (LC 664)
-- [Minimum Cost to Cut a Stick](https://leetcode.com/problems/minimum-cost-to-cut-a-stick/) (LC 1547)
+- [Burst Balloons](https://leetcode.com/problems/burst-balloons/) (LC 312) — Classic interval DP
+- [Strange Printer](https://leetcode.com/problems/strange-printer/) (LC 664) — Print strings optimally
+- [Minimum Cost to Cut a Stick](https://leetcode.com/problems/minimum-cost-to-cut-a-stick/) (LC 1547) — Same pattern as matrix chain
 
 ---
 
