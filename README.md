@@ -93,17 +93,29 @@ Path compression: on find(3), we flatten:
 ```cpp
 struct DSU {
     vector<int> par, rnk;
-    DSU(int n) : par(n), rnk(n, 0) { iota(par.begin(), par.end(), 0); }
-    int find(int x) { return par[x] == x ? x : par[x] = find(par[x]); }  // path compression
+
+    DSU(int n) : par(n), rnk(n, 0) {
+        iota(par.begin(), par.end(), 0);  // each node is its own parent
+    }
+
+    int find(int x) {
+        // Path compression: point directly to root
+        return par[x] == x ? x : par[x] = find(par[x]);
+    }
+
     bool unite(int a, int b) {
-        a = find(a); b = find(b);
+        a = find(a);
+        b = find(b);
         if (a == b) return false;           // already same component
-        if (rnk[a] < rnk[b]) swap(a, b);   // attach smaller under larger
+        if (rnk[a] < rnk[b]) swap(a, b);   // attach smaller tree under larger
         par[b] = a;
         if (rnk[a] == rnk[b]) rnk[a]++;
         return true;
     }
-    bool same(int a, int b) { return find(a) == find(b); }
+
+    bool same(int a, int b) {
+        return find(a) == find(b);
+    }
 };
 ```
 
@@ -149,23 +161,30 @@ graph TD
 struct SegTree {
     int n;
     vector<long long> t;
+
     SegTree(int n) : n(n), t(4 * n, 0) {}
 
     void update(int node, int l, int r, int pos, long long val) {
-        if (l == r) { t[node] = val; return; }
+        if (l == r) {
+            t[node] = val;
+            return;
+        }
         int mid = (l + r) / 2;
-        if (pos <= mid) update(2*node, l, mid, pos, val);
+        if (pos <= mid) update(2*node,   l,   mid, pos, val);
         else            update(2*node+1, mid+1, r, pos, val);
-        t[node] = t[2*node] + t[2*node+1];  // pull up
+        t[node] = t[2*node] + t[2*node+1];  // pull up: parent = sum of children
     }
 
     long long query(int node, int l, int r, int ql, int qr) {
-        if (qr < l || r < ql) return 0;         // out of range — identity (0 for sum)
-        if (ql <= l && r <= qr) return t[node]; // fully inside — return directly
+        if (qr < l || r < ql)          return 0;       // out of range — identity
+        if (ql <= l && r <= qr)        return t[node]; // fully inside — return directly
         int mid = (l + r) / 2;
-        return query(2*node, l, mid, ql, qr) + query(2*node+1, mid+1, r, ql, qr);
+        return query(2*node,   l,   mid, ql, qr)
+             + query(2*node+1, mid+1, r, ql, qr);
     }
-    // Call as: update(1, 0, n-1, pos, val) / query(1, 0, n-1, ql, qr)
+
+    // Call as: update(1, 0, n-1, pos, val)
+    //          query(1, 0, n-1, ql, qr)
 };
 ```
 
@@ -177,34 +196,43 @@ struct SegTree {
 struct LazySegTree {
     int n;
     vector<long long> t, lz;
+
     LazySegTree(int n) : n(n), t(4*n, 0), lz(4*n, 0) {}
 
+    // Push pending update from node down to children
     void push(int node, int l, int r) {
         if (lz[node] == 0) return;
-        t[node] += lz[node] * (r - l + 1);
-        if (l != r) {
+        t[node] += lz[node] * (r - l + 1);  // apply to current node
+        if (l != r) {                        // propagate to children
             lz[2*node]   += lz[node];
             lz[2*node+1] += lz[node];
         }
-        lz[node] = 0;
+        lz[node] = 0;  // clear pending update
     }
 
+    // Add val to all positions in [ql, qr]
     void update(int node, int l, int r, int ql, int qr, long long val) {
         push(node, l, r);
         if (qr < l || r < ql) return;
-        if (ql <= l && r <= qr) { lz[node] += val; push(node, l, r); return; }
+        if (ql <= l && r <= qr) {
+            lz[node] += val;
+            push(node, l, r);
+            return;
+        }
         int mid = (l + r) / 2;
-        update(2*node, l, mid, ql, qr, val);
+        update(2*node,   l,   mid, ql, qr, val);
         update(2*node+1, mid+1, r, ql, qr, val);
         t[node] = t[2*node] + t[2*node+1];
     }
 
+    // Query sum of [ql, qr]
     long long query(int node, int l, int r, int ql, int qr) {
         push(node, l, r);
         if (qr < l || r < ql) return 0;
         if (ql <= l && r <= qr) return t[node];
         int mid = (l + r) / 2;
-        return query(2*node, l, mid, ql, qr) + query(2*node+1, mid+1, r, ql, qr);
+        return query(2*node,   l,   mid, ql, qr)
+             + query(2*node+1, mid+1, r, ql, qr);
     }
 };
 ```
@@ -242,19 +270,27 @@ query(6):      6 → 4 → 0   (each step: i -= i & -i)  → sum of [1..6]
 struct Fenwick {
     int n;
     vector<long long> bit;
+
     Fenwick(int n) : n(n), bit(n + 1, 0) {}
 
-    void update(int i, long long delta) {  // 1-indexed
-        for (; i <= n; i += i & (-i)) bit[i] += delta;
+    // Add delta to position i (1-indexed)
+    void update(int i, long long delta) {
+        for (; i <= n; i += i & (-i))
+            bit[i] += delta;
     }
 
-    long long query(int i) {  // prefix sum [1..i]
+    // Prefix sum [1..i]
+    long long query(int i) {
         long long s = 0;
-        for (; i > 0; i -= i & (-i)) s += bit[i];
+        for (; i > 0; i -= i & (-i))
+            s += bit[i];
         return s;
     }
 
-    long long rangeQuery(int l, int r) { return query(r) - query(l - 1); }
+    // Range sum [l..r]
+    long long rangeQuery(int l, int r) {
+        return query(r) - query(l - 1);
+    }
 };
 ```
 
@@ -353,7 +389,9 @@ To find max XOR with 5=101:
 ```
 
 ```cpp
-struct TrieNode { TrieNode* child[2] = {nullptr, nullptr}; };
+struct TrieNode {
+    TrieNode* child[2] = {nullptr, nullptr};
+};
 
 struct XorTrie {
     TrieNode* root = new TrieNode();
@@ -362,17 +400,24 @@ struct XorTrie {
         TrieNode* cur = root;
         for (int i = 31; i >= 0; i--) {
             int b = (num >> i) & 1;
-            if (!cur->child[b]) cur->child[b] = new TrieNode();
+            if (!cur->child[b])
+                cur->child[b] = new TrieNode();
             cur = cur->child[b];
         }
     }
 
     int maxXor(int num) {
-        TrieNode* cur = root; int res = 0;
+        TrieNode* cur = root;
+        int res = 0;
         for (int i = 31; i >= 0; i--) {
             int b = (num >> i) & 1;
-            if (cur->child[1 - b]) { res |= (1 << i); cur = cur->child[1 - b]; }
-            else cur = cur->child[b];
+            int want = 1 - b;  // we want the opposite bit to maximize XOR
+            if (cur->child[want]) {
+                res |= (1 << i);       // got the opposite bit → this bit of XOR = 1
+                cur = cur->child[want];
+            } else {
+                cur = cur->child[b];   // forced to take same bit
+            }
         }
         return res;
     }
@@ -507,8 +552,12 @@ D: [NO, NO, NO, YES, YES, YES, YES]
 int lo = LOW, hi = HIGH, ans = hi;
 while (lo <= hi) {
     int mid = lo + (hi - lo) / 2;
-    if (feasible(mid)) { ans = mid; hi = mid - 1; }
-    else lo = mid + 1;
+    if (feasible(mid)) {
+        ans = mid;
+        hi = mid - 1;  // try to find smaller valid answer
+    } else {
+        lo = mid + 1;
+    }
 }
 ```
 
@@ -545,12 +594,19 @@ From 0:
 ```cpp
 vector<long long> dijkstra(int src, int n, vector<vector<pair<int,int>>>& adj) {
     vector<long long> dist(n, LLONG_MAX);
-    priority_queue<pair<long long,int>, vector<pair<long long,int>>, greater<>> pq;
+    priority_queue<pair<long long,int>,
+                   vector<pair<long long,int>>,
+                   greater<>> pq;  // min-heap: {dist, node}
+
     dist[src] = 0;
     pq.push({0, src});
+
     while (!pq.empty()) {
-        auto [d, u] = pq.top(); pq.pop();
-        if (d > dist[u]) continue;  // stale entry
+        auto [d, u] = pq.top();
+        pq.pop();
+
+        if (d > dist[u]) continue;  // stale entry — already found shorter path
+
         for (auto [v, w] : adj[u]) {
             if (dist[u] + w < dist[v]) {
                 dist[v] = dist[u] + w;
@@ -558,6 +614,7 @@ vector<long long> dijkstra(int src, int n, vector<vector<pair<int,int>>>& adj) {
             }
         }
     }
+
     return dist;
 }
 ```
@@ -592,15 +649,23 @@ Detect: if dist still decreases after n-1 passes → negative cycle exists.
 
 ```cpp
 bool bellmanFord(int n, int src, vector<array<int,3>>& edges, vector<long long>& dist) {
-    dist.assign(n, LLONG_MAX); dist[src] = 0;
+    dist.assign(n, LLONG_MAX);
+    dist[src] = 0;
+
     // n-1 passes: shortest path can have at most n-1 edges
-    for (int i = 0; i < n - 1; i++)
-        for (auto& [u, v, w] : edges)
+    for (int i = 0; i < n - 1; i++) {
+        for (auto& [u, v, w] : edges) {
             if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])
                 dist[v] = dist[u] + w;
-    // n-th pass: if any edge still relaxes → negative cycle
-    for (auto& [u, v, w] : edges)
-        if (dist[u] != LLONG_MAX && dist[u] + w < dist[v]) return false;
+        }
+    }
+
+    // n-th pass: if any edge still relaxes → negative cycle exists
+    for (auto& [u, v, w] : edges) {
+        if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])
+            return false;
+    }
+
     return true;  // true = no negative cycle
 }
 ```
@@ -637,12 +702,15 @@ WHY k must be outermost:
 ```
 
 ```cpp
-// Initialize: dist[i][i]=0, dist[i][j]=edge weight or INF, no self-loops
-for (int k = 0; k < n; k++)        // ← k MUST be outermost
-    for (int i = 0; i < n; i++)
-        for (int j = 0; j < n; j++)
+// Initialize: dist[i][i]=0, dist[i][j]=edge weight or INF (use 1e9 not INT_MAX)
+for (int k = 0; k < n; k++) {       // ← k MUST be outermost
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < n; j++) {
             if (dist[i][k] < INF && dist[k][j] < INF)
                 dist[i][j] = min(dist[i][j], dist[i][k] + dist[k][j]);
+        }
+    }
+}
 // After: dist[i][j] = shortest path from i to j through any intermediates
 // Negative cycle detection: if dist[i][i] < 0 after → negative cycle
 ```
@@ -674,14 +742,20 @@ Deque state: front = cheapest unprocessed node
 ```cpp
 deque<int> dq;
 vector<int> dist(n, INT_MAX);
-dist[src] = 0; dq.push_back(src);
+dist[src] = 0;
+dq.push_back(src);
+
 while (!dq.empty()) {
-    int u = dq.front(); dq.pop_front();
-    for (auto [v, w] : adj[u]) {         // w is 0 or 1
+    int u = dq.front();
+    dq.pop_front();
+
+    for (auto [v, w] : adj[u]) {   // w is 0 or 1
         if (dist[u] + w < dist[v]) {
             dist[v] = dist[u] + w;
-            if (w == 0) dq.push_front(v);  // free move → high priority
-            else        dq.push_back(v);   // costs 1 → normal queue
+            if (w == 0)
+                dq.push_front(v);  // free move → process immediately
+            else
+                dq.push_back(v);   // costs 1 → normal queue
         }
     }
 }
@@ -709,27 +783,33 @@ Kruskal: sort edges by weight, greedily add if no cycle (DSU check).
 ```
 
 ```cpp
-// Kruskal (sort edges + DSU)
-sort(edges.begin(), edges.end());  // {weight, u, v}
+// --- Kruskal (sort edges + DSU) --- O(E log E)
+sort(edges.begin(), edges.end());  // edges stored as {weight, u, v}
 DSU dsu(n);
 long long cost = 0;
-for (auto& [w, u, v] : edges)
-    if (dsu.unite(u, v)) cost += w;
-// Complexity: O(E log E)
-
-// Prim (min-heap, better for dense graphs)
-vector<bool> inMST(n, false);
-priority_queue<pair<int,int>, vector<pair<int,int>>, greater<>> pq;
-pq.push({0, 0});
-long long cost = 0;
-while (!pq.empty()) {
-    auto [w, u] = pq.top(); pq.pop();
-    if (inMST[u]) continue;
-    inMST[u] = true; cost += w;
-    for (auto [v, wt] : adj[u])
-        if (!inMST[v]) pq.push({wt, v});
+for (auto& [w, u, v] : edges) {
+    if (dsu.unite(u, v))
+        cost += w;  // add edge only if it doesn't create a cycle
 }
-// Complexity: O(E log V)
+
+// --- Prim (min-heap, better for dense graphs) --- O(E log V)
+vector<bool> inMST(n, false);
+priority_queue<pair<int,int>,
+               vector<pair<int,int>>,
+               greater<>> pq;  // min-heap: {edge_weight, node}
+pq.push({0, 0});
+long long mstCost = 0;
+
+while (!pq.empty()) {
+    auto [w, u] = pq.top();
+    pq.pop();
+    if (inMST[u]) continue;  // skip if already in MST
+    inMST[u] = true;
+    mstCost += w;
+    for (auto [v, wt] : adj[u])
+        if (!inMST[v])
+            pq.push({wt, v});
+}
 ```
 
 | | Kruskal | Prim |
@@ -766,34 +846,48 @@ Valid topological order: `0, 1, 2, 3` or `1, 0, 2, 3`
 
 ```cpp
 vector<int> indeg(n, 0);
-for (auto& [u, v] : edges) indeg[v]++;  // count prerequisites for each node
+for (auto& [u, v] : edges)
+    indeg[v]++;  // count prerequisites for each node
+
 queue<int> q;
-for (int i = 0; i < n; i++) if (indeg[i] == 0) q.push(i);  // start with no-prereq nodes
+for (int i = 0; i < n; i++)
+    if (indeg[i] == 0) q.push(i);  // start with nodes that have no prerequisites
+
 vector<int> order;
 while (!q.empty()) {
-    int u = q.front(); q.pop();
+    int u = q.front();
+    q.pop();
     order.push_back(u);
     for (int v : adj[u])
-        if (--indeg[v] == 0) q.push(v);  // prerequisite satisfied!
+        if (--indeg[v] == 0)
+            q.push(v);  // all prerequisites of v are now satisfied
 }
-bool hasCycle = ((int)order.size() != n);  // not all processed → cycle
+
+bool hasCycle = ((int)order.size() != n);  // not all nodes processed → cycle exists
 ```
 
 **DFS-based toposort** — push to stack on post-order exit, then reverse:
 ```cpp
-vector<int> color(n, 0);  // 0=unvisited, 1=in-stack(gray), 2=done
+vector<int> color(n, 0);  // 0=unvisited, 1=in-stack (gray), 2=done (black)
 vector<int> order;
 bool hasCycle = false;
+
 function<void(int)> dfs = [&](int u) {
-    color[u] = 1;  // mark as in current DFS path
+    color[u] = 1;  // mark gray: currently on the DFS path
     for (int v : adj[u]) {
-        if (color[v] == 1) { hasCycle = true; return; }  // back edge → cycle
-        if (color[v] == 0) dfs(v);
+        if (color[v] == 1) {          // back edge → cycle!
+            hasCycle = true;
+            return;
+        }
+        if (color[v] == 0) dfs(v);   // unvisited → explore
     }
-    color[u] = 2;
-    order.push_back(u);  // push AFTER all descendants processed
+    color[u] = 2;                    // mark black: fully processed
+    order.push_back(u);              // push AFTER all descendants
 };
-for (int i = 0; i < n; i++) if (color[i] == 0) dfs(i);
+
+for (int i = 0; i < n; i++)
+    if (color[i] == 0) dfs(i);
+
 reverse(order.begin(), order.end());  // reverse post-order = topological order
 ```
 
@@ -832,15 +926,19 @@ Example directed cycle: A→B→C→A
 
 ```cpp
 // Directed cycle detection via 3-color DFS
-vector<int> color(n, 0);  // 0=white, 1=gray, 2=black
+vector<int> color(n, 0);  // 0=white (unseen), 1=gray (on path), 2=black (done)
 bool hasCycle = false;
+
 function<void(int)> dfs = [&](int u) {
-    color[u] = 1;  // entering: mark gray
+    color[u] = 1;  // entering node: mark gray
     for (int v : adj[u]) {
-        if (color[v] == 1) { hasCycle = true; return; }  // back edge!
-        if (color[v] == 0) dfs(v);
+        if (color[v] == 1) {        // neighbor is on current path → cycle!
+            hasCycle = true;
+            return;
+        }
+        if (color[v] == 0) dfs(v); // unvisited → recurse
     }
-    color[u] = 2;  // done: mark black
+    color[u] = 2;  // leaving node: mark black (all its descendants are done)
 };
 ```
 
@@ -884,35 +982,46 @@ LCA(4, 3):
 ```
 
 ```cpp
-const int LOG = 20;  // supports trees up to 2^20 = ~1M nodes
+const int LOG = 20;  // supports trees up to 2^20 ≈ 1M nodes
 vector<vector<int>> up(LOG, vector<int>(n, 0));
 vector<int> depth(n, 0);
 
 // Step 1: fill direct parents via DFS
-function<void(int,int)> dfs = [&](int u, int p) {
+function<void(int, int)> dfs = [&](int u, int p) {
     up[0][u] = p;  // direct parent (root's parent = itself)
-    for (int v : adj[u]) if (v != p) {
-        depth[v] = depth[u] + 1;
-        dfs(v, u);
+    for (int v : adj[u]) {
+        if (v != p) {
+            depth[v] = depth[u] + 1;
+            dfs(v, u);
+        }
     }
 };
 dfs(0, 0);
 
 // Step 2: build binary lifting table
+// up[k][v] = 2^k-th ancestor of v
 for (int k = 1; k < LOG; k++)
     for (int v = 0; v < n; v++)
-        up[k][v] = up[k-1][up[k-1][v]];  // 2^k-th = (2^(k-1))-th of (2^(k-1))-th
+        up[k][v] = up[k-1][up[k-1][v]];
 
-// Step 3: LCA query
+// Step 3: LCA query in O(log n)
 auto lca = [&](int u, int v) -> int {
     if (depth[u] < depth[v]) swap(u, v);  // ensure u is deeper
-    // Lift u to same depth as v
+
+    // Lift u up to the same depth as v
     int diff = depth[u] - depth[v];
-    for (int k = 0; k < LOG; k++) if (diff >> k & 1) u = up[k][u];
-    if (u == v) return u;  // one was ancestor of other
-    // Binary-lift both until just below LCA
-    for (int k = LOG-1; k >= 0; k--)
-        if (up[k][u] != up[k][v]) { u = up[k][u]; v = up[k][v]; }
+    for (int k = 0; k < LOG; k++)
+        if ((diff >> k) & 1) u = up[k][u];
+
+    if (u == v) return u;  // v was an ancestor of u
+
+    // Binary-lift both until they are just below the LCA
+    for (int k = LOG - 1; k >= 0; k--)
+        if (up[k][u] != up[k][v]) {
+            u = up[k][u];
+            v = up[k][v];
+        }
+
     return up[0][u];  // one step above = LCA
 };
 ```
@@ -1018,27 +1127,35 @@ Condensed DAG: SCC1 → SCC2
 2. DFS on the **transposed** (reversed) graph, in stack-pop order. Each DFS tree is one SCC.
 
 ```cpp
-// Kosaraju's SCC
-vector<int> order;  // finish order
+// --- Pass 1: DFS original graph, record finish order ---
+vector<int> order;  // nodes in finish order (last-finished = most "source-like")
 vector<bool> visited(n, false);
+
 function<void(int)> dfs1 = [&](int u) {
     visited[u] = true;
-    for (int v : adj[u]) if (!visited[v]) dfs1(v);
-    order.push_back(u);  // push on finish
+    for (int v : adj[u])
+        if (!visited[v]) dfs1(v);
+    order.push_back(u);  // push AFTER all descendants → finish order
 };
-for (int i = 0; i < n; i++) if (!visited[i]) dfs1(i);
+for (int i = 0; i < n; i++)
+    if (!visited[i]) dfs1(i);
 
-vector<int> comp(n, -1);
+// --- Pass 2: DFS transposed graph in reverse finish order ---
+vector<int> comp(n, -1);  // comp[u] = SCC id of node u
 int numSCC = 0;
+
 function<void(int, int)> dfs2 = [&](int u, int c) {
     comp[u] = c;
-    for (int v : radj[u]) if (comp[v] == -1) dfs2(v, c);  // radj = transposed graph
+    for (int v : radj[u])  // radj = reversed/transposed adjacency list
+        if (comp[v] == -1) dfs2(v, c);
 };
-for (int i = n - 1; i >= 0; i--) {  // process in reverse finish order
-    if (comp[order[i]] == -1) dfs2(order[i], numSCC++);
+
+for (int i = n - 1; i >= 0; i--) {  // reverse finish order
+    if (comp[order[i]] == -1)
+        dfs2(order[i], numSCC++);
 }
 // comp[u] = which SCC node u belongs to
-// numSCC = total number of SCCs
+// numSCC  = total number of SCCs
 ```
 
 **🔗 Practice Problems:**
@@ -1411,11 +1528,12 @@ Just square and multiply: O(log e) multiplications.
 
 ```cpp
 long long power(long long b, long long e, long long mod) {
-    long long res = 1; b %= mod;
+    long long res = 1;
+    b %= mod;
     while (e > 0) {
-        if (e & 1) res = res * b % mod;
-        b = b * b % mod;
-        e >>= 1;
+        if (e & 1) res = res * b % mod;  // if current bit is set, multiply in b
+        b = b * b % mod;                 // square the base
+        e >>= 1;                         // shift to next bit
     }
     return res;
 }
@@ -1428,8 +1546,11 @@ long long power(long long b, long long e, long long mod) {
 When `mod` is **prime**: `a^(-1) ≡ a^(mod-2) (mod p)` by Fermat's Little Theorem.
 
 ```cpp
-long long modInverse(long long a, long long mod) { return power(a, mod - 2, mod); }
-// Only works when mod is prime! Use extended Euclidean for non-prime mod.
+// Only valid when mod is prime! (Uses Fermat's Little Theorem: a^(p-1) ≡ 1 mod p)
+long long modInverse(long long a, long long mod) {
+    return power(a, mod - 2, mod);
+}
+// For non-prime mod: use extended Euclidean algorithm instead
 ```
 
 ---
@@ -1437,14 +1558,18 @@ long long modInverse(long long a, long long mod) { return power(a, mod - 2, mod)
 ### 5.3 nCr mod p
 
 ```cpp
-const int MAXN = 200005; const long long MOD = 1e9 + 7;
+const int MAXN  = 200005;
+const long long MOD = 1e9 + 7;
 vector<long long> fact(MAXN), inv_fact(MAXN);
 
 void precompute() {
     fact[0] = 1;
-    for (int i = 1; i < MAXN; i++) fact[i] = fact[i-1] * i % MOD;
+    for (int i = 1; i < MAXN; i++)
+        fact[i] = fact[i-1] * i % MOD;
+
     inv_fact[MAXN-1] = modInverse(fact[MAXN-1], MOD);
-    for (int i = MAXN-2; i >= 0; i--) inv_fact[i] = inv_fact[i+1] * (i+1) % MOD;
+    for (int i = MAXN-2; i >= 0; i--)
+        inv_fact[i] = inv_fact[i+1] * (i+1) % MOD;
 }
 
 long long nCr(int n, int r) {
@@ -1458,17 +1583,24 @@ long long nCr(int n, int r) {
 ### 5.4 Sieve + Smallest Prime Factor
 
 ```cpp
-vector<int> spf(MAXN);
+vector<int> spf(MAXN);  // spf[i] = smallest prime factor of i
+
 void sieve() {
-    iota(spf.begin(), spf.end(), 0);
-    for (int i = 2; (long long)i * i < MAXN; i++)
-        if (spf[i] == i)
+    iota(spf.begin(), spf.end(), 0);  // spf[i] = i initially
+    for (int i = 2; (long long)i * i < MAXN; i++) {
+        if (spf[i] == i) {  // i is prime
             for (int j = i * i; j < MAXN; j += i)
-                if (spf[j] == j) spf[j] = i;
+                if (spf[j] == j) spf[j] = i;  // first prime factor of j is i
+        }
+    }
 }
+
 vector<int> factorize(int n) {
     vector<int> f;
-    while (n > 1) { f.push_back(spf[n]); n /= spf[n]; }
+    while (n > 1) {
+        f.push_back(spf[n]);
+        n /= spf[n];
+    }
     return f;
 }
 ```
@@ -1478,14 +1610,24 @@ vector<int> factorize(int n) {
 ### 5.5 GCD / LCM / Extended Euclid
 
 ```cpp
-long long gcd(long long a, long long b) { return b ? gcd(b, a % b) : a; }
-long long lcm(long long a, long long b) { return a / gcd(a, b) * b; }  // divide first!
+long long gcd(long long a, long long b) {
+    return b ? gcd(b, a % b) : a;
+}
 
+long long lcm(long long a, long long b) {
+    return a / gcd(a, b) * b;  // divide BEFORE multiply to avoid overflow
+}
+
+// Extended Euclidean: finds x, y such that a*x + b*y = gcd(a, b)
 long long extgcd(long long a, long long b, long long& x, long long& y) {
-    if (b == 0) { x = 1; y = 0; return a; }
+    if (b == 0) {
+        x = 1; y = 0;
+        return a;
+    }
     long long x1, y1;
     long long g = extgcd(b, a % b, x1, y1);
-    x = y1; y = x1 - (a / b) * y1;
+    x = y1;
+    y = x1 - (a / b) * y1;
     return g;
 }
 ```
@@ -1516,26 +1658,38 @@ x & (x - 1)               // removes lowest set bit
 ### 6.1 KMP (O(n+m))
 
 ```cpp
+// Build the LPS (Longest Proper Prefix which is also Suffix) table
 vector<int> computeLPS(string& pat) {
     int m = pat.size();
     vector<int> lps(m, 0);
     int len = 0, i = 1;
     while (i < m) {
-        if (pat[i] == pat[len]) lps[i++] = ++len;
-        else if (len) len = lps[len - 1];
-        else lps[i++] = 0;
+        if (pat[i] == pat[len]) {
+            lps[i++] = ++len;           // extend matching prefix
+        } else if (len) {
+            len = lps[len - 1];         // fallback using LPS itself
+        } else {
+            lps[i++] = 0;               // no prefix match at all
+        }
     }
     return lps;
 }
 
+// Search: returns all start positions (0-indexed) of pat in text
 vector<int> kmpSearch(string& text, string& pat) {
-    vector<int> lps = computeLPS(pat), matches;
-    int i = 0, j = 0;
+    vector<int> lps = computeLPS(pat);
+    vector<int> matches;
+    int i = 0, j = 0;  // i = text pointer, j = pattern pointer
     while (i < (int)text.size()) {
-        if (text[i] == pat[j]) { i++; j++; }
-        if (j == (int)pat.size()) { matches.push_back(i - j); j = lps[j - 1]; }
-        else if (i < (int)text.size() && text[i] != pat[j]) {
-            if (j) j = lps[j - 1]; else i++;
+        if (text[i] == pat[j]) {
+            i++; j++;
+        }
+        if (j == (int)pat.size()) {
+            matches.push_back(i - j);  // match found at position i-j
+            j = lps[j - 1];            // look for next match
+        } else if (i < (int)text.size() && text[i] != pat[j]) {
+            if (j) j = lps[j - 1];    // use LPS to avoid re-comparing
+            else   i++;                // no prefix match, move text pointer
         }
     }
     return matches;
@@ -1557,15 +1711,20 @@ vector<int> kmpSearch(string& text, string& pat) {
 vector<int> zFunction(string& s) {
     int n = s.size();
     vector<int> z(n, 0);
-    int l = 0, r = 0;
+    int l = 0, r = 0;  // [l, r) is the rightmost Z-box found so far
     for (int i = 1; i < n; i++) {
-        if (i < r) z[i] = min(r - i, z[i - l]);
-        while (i + z[i] < n && s[z[i]] == s[i + z[i]]) z[i]++;
-        if (i + z[i] > r) { l = i; r = i + z[i]; }
+        if (i < r)
+            z[i] = min(r - i, z[i - l]);  // use previously computed Z values
+        while (i + z[i] < n && s[z[i]] == s[i + z[i]])
+            z[i]++;  // extend Z-box as far as possible
+        if (i + z[i] > r) {
+            l = i;
+            r = i + z[i];  // update rightmost Z-box
+        }
     }
     return z;
 }
-// Pattern search: run on (pattern + '#' + text), matches where z[i] == pattern.size()
+// Pattern search trick: build (pattern + "#" + text), then check where z[i] == |pattern|
 ```
 
 ---
@@ -1578,16 +1737,18 @@ vector<long long> prefHash, powBase;
 
 void buildHash(string& s) {
     int n = s.size();
-    prefHash.assign(n + 1, 0); powBase.assign(n + 1, 1);
+    prefHash.assign(n + 1, 0);
+    powBase.assign(n + 1, 1);
     for (int i = 0; i < n; i++) {
         prefHash[i+1] = (prefHash[i] * BASE + s[i]) % MOD;
-        powBase[i+1] = powBase[i] * BASE % MOD;
+        powBase[i+1]  = powBase[i] * BASE % MOD;
     }
 }
 
+// Get hash of s[l..r] (0-indexed, inclusive)
 long long getHash(int l, int r) {
     long long h = (prefHash[r+1] - prefHash[l] * powBase[r-l+1]) % MOD;
-    return (h + MOD) % MOD;
+    return (h + MOD) % MOD;  // +MOD to handle negative result
 }
 ```
 
@@ -1722,30 +1883,34 @@ stable_sort(v.begin(), v.end(), cmp);
 - In PQ: `cmp(a,b)=true` means a has **lower priority** → b goes to top
 
 ```cpp
-// Max-heap (default — largest on top):
+// Max-heap (default — largest element on top):
 priority_queue<int> pq;
-pq.push(3); pq.push(1); pq.push(5);
-pq.top();   // 5
+pq.push(3);
+pq.push(1);
+pq.push(5);
+pq.top();   // → 5
 
-// Min-heap (smallest on top):
+// Min-heap (smallest element on top):
 priority_queue<int, vector<int>, greater<int>> pq;
 
-// Min-heap of pairs {distance, node} — classic Dijkstra:
+// Min-heap of {distance, node} pairs — classic Dijkstra setup:
 priority_queue<pair<int,int>, vector<pair<int,int>>, greater<>> pq;
 pq.push({0, src});
-auto [dist, node] = pq.top(); pq.pop();
+auto [dist, node] = pq.top();
+pq.pop();
 
-// Custom comparator via LAMBDA (need decltype):
+// Custom comparator via LAMBDA (requires decltype trick):
 auto cmp = [](const pair<int,int>& a, const pair<int,int>& b) {
-    return a.second > b.second;  // min-heap by .second
+    return a.second > b.second;  // min-heap by .second field
 };
 priority_queue<pair<int,int>, vector<pair<int,int>>, decltype(cmp)> pq(cmp);
 
-// Custom comparator via STRUCT (cleaner for complex logic):
+// Custom comparator via STRUCT (cleaner for multi-field sorting):
 struct Cmp {
     bool operator()(const pair<int,int>& a, const pair<int,int>& b) const {
-        if (a.second != b.second) return a.second > b.second; // min by .second
-        return a.first > b.first;                             // tie: min by .first
+        if (a.second != b.second)
+            return a.second > b.second;  // min by .second
+        return a.first > b.first;        // tie-break: min by .first
     }
 };
 priority_queue<pair<int,int>, vector<pair<int,int>>, Cmp> pq;
@@ -1754,9 +1919,10 @@ priority_queue<pair<int,int>, vector<pair<int,int>>, Cmp> pq;
 priority_queue<int, vector<int>, greater<int>> minPQ;
 for (int x : arr) {
     minPQ.push(x);
-    if ((int)minPQ.size() > k) minPQ.pop();  // evict smallest
+    if ((int)minPQ.size() > k)
+        minPQ.pop();  // evict smallest, keeping only K largest
 }
-// minPQ now contains the K largest elements; minPQ.top() = kth largest
+// minPQ.top() = kth largest element
 ```
 
 ---
