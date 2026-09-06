@@ -123,21 +123,25 @@ struct DSU {
 
 #### 🧠 Mental Model
 
-Think of it as a **divide-and-conquer structure stored as an array**. Recursively split the array in half, each node stores the aggregate (sum/min/max/gcd) of its range.
+Think of it as a **divide-and-conquer structure stored as an array**. Recursively split the array in half; each node stores the aggregate (sum/min/max/gcd) of its range. Node `i` has children `2i` (left) and `2i+1` (right).
 
+```mermaid
+graph TD
+    A["[0..5] = 21"]
+    A --> B["[0..2] = 7"]
+    A --> C["[3..5] = 14"]
+    B --> D["[0..1] = 3"]
+    B --> E["[2] = 4"]
+    D --> F["[0] = 2"]
+    D --> G["[1] = 1"]
+    C --> H["[3..4] = 9"]
+    C --> I["[5] = 5"]
+    H --> J["[3] = 3"]
+    H --> K["[4] = 6"]
 ```
-Array: [2, 1, 4, 3, 6, 5]
-                 [1..6] = 21
-               /             \
-        [1..3]=7           [4..6]=14
-         /     \             /     \
-      [1..2]=3 [3]=4     [4..5]=9 [6]=5
-       /    \               /   \
-    [1]=2  [2]=1         [4]=3  [5]=6
 
-Node i has children 2i (left) and 2i+1 (right).
-Query sum(2..5): combine [2]=1, [3]=4, [4..5]=9  → 14
-```
+> **Query sum(1..4):** Walk the tree — collect nodes fully inside `[1..4]`, skip nodes fully outside.
+> Nodes covered: `[1]=1`, `[2]=4`, `[3..4]=9` → **sum = 14** ✓
 
 **Complexity:** Build O(n), query/update O(log n), space O(4n).
 
@@ -1126,101 +1130,393 @@ O(n) all palindromic substrings. Transform with `#` separators for even/odd unif
 
 ## 7. 🛠️ STL Cheat Sheet
 
+> 💡 **Philosophy:** STL is powerful but has sharp edges. This section explains *what* each function actually returns, *why* to use it, and the **non-trivial patterns** you'll actually need in contests and interviews.
+
 ---
 
-### 7.1 Binary Search
+### 7.1 Binary Search on Sorted Vectors
+
+#### What do `lower_bound` and `upper_bound` actually return?
+
+```
+Vector v = [1, 3, 3, 5, 7]
+            0  1  2  3  4   ← indices
+
+lower_bound(v, 3) → iterator to index 1  (first element >= 3)
+upper_bound(v, 3) → iterator to index 3  (first element >  3)
+lower_bound(v, 4) → iterator to index 3  (no 4; points to next bigger: 5)
+lower_bound(v, 8) → v.end()              (bigger than everything)
+```
 
 ```cpp
-lower_bound(v.begin(), v.end(), x)   // first element >= x
-upper_bound(v.begin(), v.end(), x)   // first element > x
+// --- Basics ---
+auto it = lower_bound(v.begin(), v.end(), x); // first element >= x
+auto it = upper_bound(v.begin(), v.end(), x); // first element >  x
+
+// Convert iterator to index:
 int idx = lower_bound(v.begin(), v.end(), x) - v.begin();
+
+// Check if x actually exists:
 bool exists = binary_search(v.begin(), v.end(), x);
+// Or equivalently:
+bool exists = (it != v.end() && *it == x);
+
+// Count occurrences of x in sorted v:
+int cnt = upper_bound(v.begin(), v.end(), x) - lower_bound(v.begin(), v.end(), x);
+
+// Find last element <= x:
+auto it = upper_bound(v.begin(), v.end(), x);
+if (it != v.begin()) --it;  // *it is now the largest element <= x
+```
+
+#### Searching on structs / pairs
+
+```cpp
+vector<pair<int,int>> v = {{1,10},{3,20},{3,30},{5,40}};
+
+// Find first pair whose .first >= 3:
+auto it = lower_bound(v.begin(), v.end(), make_pair(3, INT_MIN));
+// INT_MIN ensures we get the very first pair with .first == 3
+
+// Custom field search with comparator:
+struct Item { int id, val; };
+vector<Item> items;
+auto it = lower_bound(items.begin(), items.end(), 5,
+    [](const Item& a, int b) { return a.val < b; }); // first Item with .val >= 5
+```
+
+#### Binary search on sets and maps (use MEMBER, not `std::`)
+
+```cpp
+set<int> s = {1, 3, 5, 7};
+
+// CORRECT — O(log n):
+auto it = s.lower_bound(4);  // → iterator to 5
+auto it = s.upper_bound(3);  // → iterator to 5
+
+// WRONG — O(n), iterates linearly through set:
+auto it = std::lower_bound(s.begin(), s.end(), 4);  // ← DO NOT USE on set/map
 ```
 
 ---
 
-### 7.2 priority_queue
+### 7.2 `sort` — Custom Comparators
+
+#### The comparator contract: `cmp(a, b)` must return `true` if `a` should come **before** `b`.
 
 ```cpp
-priority_queue<int> maxHeap;                                    // max-heap (default)
-priority_queue<int, vector<int>, greater<int>> minHeap;         // min-heap
+vector<int> v = {5, 1, 4, 2, 3};
+
+// Sort ascending (default):
+sort(v.begin(), v.end());
+
+// Sort descending:
+sort(v.begin(), v.end(), greater<int>());
+// Or with lambda:
+sort(v.begin(), v.end(), [](int a, int b){ return a > b; });
+
+// Sort vector of pairs by second element, then by first descending:
+vector<pair<int,int>> p;
+sort(p.begin(), p.end(), [](const auto& a, const auto& b){
+    if (a.second != b.second) return a.second < b.second;  // by .second asc
+    return a.first > b.first;                               // tie-break: .first desc
+});
+
+// Sort by a custom struct field:
+struct Task { int deadline, profit; };
+vector<Task> tasks;
+sort(tasks.begin(), tasks.end(),
+    [](const Task& a, const Task& b){ return a.deadline < b.deadline; });
+
+// Sort indices of array v by their values (without moving v):
+vector<int> idx(n);
+iota(idx.begin(), idx.end(), 0);
+sort(idx.begin(), idx.end(), [&](int i, int j){ return v[i] < v[j]; });
+// idx[0] is now the index of the smallest element in v
+
+// stable_sort: preserves relative order of equal elements:
+stable_sort(v.begin(), v.end(), cmp);
 ```
 
-> **⚠️ Trap:** `greater<int>` = min-heap. Comparator `return a < b` means "a has lower priority" (opposite of sort).
+> **⚠️ Trap:** Comparators must be **strict weak ordering** — never return `true` when `a == b` (e.g., `return a <= b` is UB). Always use strict `<` or `>`.
 
 ---
 
-### 7.3 set / multiset / map
+### 7.3 `priority_queue` — All Forms
+
+#### Intuition: PQ comparator is the **opposite** of sort comparator.
+- In `sort`: `cmp(a,b)=true` means a comes first (a is "less")
+- In PQ: `cmp(a,b)=true` means a has **lower priority** → b goes to top
 
 ```cpp
-// set
-s.insert(x); s.erase(x);
-auto it = s.lower_bound(x);   // USE MEMBER FUNCTION — O(log n), not std:: (O(n))
+// Max-heap (default — largest on top):
+priority_queue<int> pq;
+pq.push(3); pq.push(1); pq.push(5);
+pq.top();   // 5
 
-// multiset — CRITICAL TRAP:
-ms.erase(ms.find(x));    // erase ONE copy
-ms.erase(x);             // erases ALL copies — common bug!
+// Min-heap (smallest on top):
+priority_queue<int, vector<int>, greater<int>> pq;
 
-// map
-mp[x]++;                          // creates entry if absent, then increments
-if (mp.find(x) != mp.end()) ...   // safe check (avoids creating entry)
-```
+// Min-heap of pairs {distance, node} — classic Dijkstra:
+priority_queue<pair<int,int>, vector<pair<int,int>>, greater<>> pq;
+pq.push({0, src});
+auto [dist, node] = pq.top(); pq.pop();
 
----
+// Custom comparator via LAMBDA (need decltype):
+auto cmp = [](const pair<int,int>& a, const pair<int,int>& b) {
+    return a.second > b.second;  // min-heap by .second
+};
+priority_queue<pair<int,int>, vector<pair<int,int>>, decltype(cmp)> pq(cmp);
 
-### 7.4 unordered_map caveats
-
-```cpp
-// No hash for pair<int,int> by default:
-struct pair_hash {
-    size_t operator()(const pair<int,int>& p) const {
-        return hash<long long>()(((long long)p.first << 32) ^ (unsigned int)p.second);
+// Custom comparator via STRUCT (cleaner for complex logic):
+struct Cmp {
+    bool operator()(const pair<int,int>& a, const pair<int,int>& b) const {
+        if (a.second != b.second) return a.second > b.second; // min by .second
+        return a.first > b.first;                             // tie: min by .first
     }
 };
-unordered_map<pair<int,int>, int, pair_hash> mp;
-// If TLE: mp.reserve(n); mp.max_load_factor(0.25);
+priority_queue<pair<int,int>, vector<pair<int,int>>, Cmp> pq;
+
+// K largest elements using a MIN-heap of size K:
+priority_queue<int, vector<int>, greater<int>> minPQ;
+for (int x : arr) {
+    minPQ.push(x);
+    if ((int)minPQ.size() > k) minPQ.pop();  // evict smallest
+}
+// minPQ now contains the K largest elements; minPQ.top() = kth largest
 ```
 
 ---
 
-### 7.5 Frequently-Forgotten STL
+### 7.4 `set` / `multiset` / `map` Essentials
 
 ```cpp
-accumulate(v.begin(), v.end(), 0LL);           // 0LL to avoid overflow!
-v.erase(unique(v.begin(), v.end()), v.end()); // full dedup (sort first!)
-next_permutation(v.begin(), v.end());          // needs sorted input for all perms
-memset(arr, 0, sizeof(arr));                   // only safe for 0 / -1
-__int128                                       // big multiplication (print manually)
+// ---- set ----
+set<int> s;
+s.insert(x);
+s.erase(x);           // removes x if it exists, no-op otherwise
+s.count(x);           // 0 or 1
+s.find(x);            // iterator to x, or s.end() if not found
+
+// Neighbour queries — very useful in interviews:
+auto it = s.lower_bound(x);   // first element >= x  (member fn, O(log n))
+auto it = s.upper_bound(x);   // first element >  x
+// Largest element <= x:
+auto it = s.upper_bound(x);
+if (it != s.begin()) { --it; /* *it is largest <= x */ }
+// Smallest element > x (next element after x):
+auto it = s.upper_bound(x);  // directly points there
+
+// ---- multiset ----
+multiset<int> ms;
+ms.insert(x);               // allows duplicates
+ms.count(x);                // count of x
+ms.erase(ms.find(x));       // ← erase EXACTLY ONE copy of x
+ms.erase(x);                // ← erases ALL copies of x — COMMON BUG!
+
+// ---- map ----
+map<int,int> mp;
+mp[x]++;                         // creates mp[x]=0 if absent, then ++
+mp.count(x);                     // 1 if exists, 0 if not (no side effect)
+if (mp.find(x) != mp.end()) {}   // safe existence check
+
+// Iterate in sorted order:
+for (auto& [key, val] : mp) { ... }  // ascending by key automatically
+
+// Safe erase while iterating (classic pattern):
+for (auto it = mp.begin(); it != mp.end(); ) {
+    if (shouldRemove(*it)) it = mp.erase(it);  // erase returns next iterator
+    else ++it;
+}
+
+// Get all values for a key range [lo, hi]:
+for (auto it = mp.lower_bound(lo); it != mp.upper_bound(hi); ++it) {
+    // process it->first, it->second
+}
 ```
 
 ---
 
-### 7.6 PBDS ordered_set
+### 7.5 `unordered_map` / `unordered_set` — When and How
+
+```cpp
+// O(1) average lookup — use when you don't need sorted order
+unordered_map<int,int> mp;
+unordered_set<int> st;
+
+// Avoid TLE from hash collisions (adversarial inputs):
+mp.reserve(1 << 18);      // pre-allocate buckets (use power of 2)
+mp.max_load_factor(0.25); // fewer collisions at cost of memory
+
+// Custom hash for pair<int,int> (no built-in hash!):
+struct PairHash {
+    size_t operator()(const pair<int,int>& p) const {
+        // Combine two hashes using XOR + shift trick:
+        return hash<long long>()(((long long)p.first << 32) ^ (unsigned)p.second);
+    }
+};
+unordered_map<pair<int,int>, int, PairHash> mp;
+
+// Custom hash for any struct:
+struct Node { int x, y, state; };
+struct NodeHash {
+    size_t operator()(const Node& n) const {
+        size_t h = 0;
+        h ^= hash<int>()(n.x)   + 0x9e3779b9 + (h<<6) + (h>>2);
+        h ^= hash<int>()(n.y)   + 0x9e3779b9 + (h<<6) + (h>>2);
+        h ^= hash<int>()(n.state) + 0x9e3779b9 + (h<<6) + (h>>2);
+        return h;
+    }
+};
+```
+
+> **⚠️ Rule of thumb:** If TLE on `unordered_map` with large input → switch to `map` (log n but no hash attacks) or reserve + lower load factor.
+
+---
+
+### 7.6 Frequently-Forgotten STL (with explanations)
+
+```cpp
+// accumulate — sum / product / custom fold:
+long long sum = accumulate(v.begin(), v.end(), 0LL);     // 0LL: avoids int overflow!
+long long prod = accumulate(v.begin(), v.end(), 1LL, multiplies<long long>());
+string joined = accumulate(words.begin(), words.end(), string(""),
+    [](const string& a, const string& b){ return a + " " + b; });
+
+// Deduplication (must sort first — unique only removes CONSECUTIVE duplicates):
+sort(v.begin(), v.end());
+v.erase(unique(v.begin(), v.end()), v.end());
+// After this, v has unique elements in sorted order
+
+// Coordinate compression (rank of each element):
+vector<int> sorted_v = v;
+sort(sorted_v.begin(), sorted_v.end());
+sorted_v.erase(unique(sorted_v.begin(), sorted_v.end()), sorted_v.end());
+auto rank = [&](int x) {
+    return lower_bound(sorted_v.begin(), sorted_v.end(), x) - sorted_v.begin();
+};
+
+// next_permutation / prev_permutation:
+vector<int> perm = {1, 2, 3};
+do {
+    // process this permutation
+} while (next_permutation(perm.begin(), perm.end()));
+// Must start from sorted order to iterate ALL permutations
+
+// max_element / min_element:
+int maxVal = *max_element(v.begin(), v.end());
+int minIdx = min_element(v.begin(), v.end()) - v.begin();  // index of min
+
+// nth_element — partial sort, O(n) average (for kth smallest):
+nth_element(v.begin(), v.begin() + k, v.end());
+int kth = v[k];  // v[k] is now the (k+1)-th smallest; elements around it are unordered
+
+// fill / iota:
+fill(v.begin(), v.end(), 0);         // set all to 0
+iota(v.begin(), v.end(), 1);         // fill with 1, 2, 3, ...
+
+// rotate:
+rotate(v.begin(), v.begin() + k, v.end());  // left-rotate by k positions
+
+// count_if:
+int neg = count_if(v.begin(), v.end(), [](int x){ return x < 0; });
+
+// memset (careful!):
+memset(arr, 0, sizeof(arr));    // fills with 0 — safe
+memset(arr, -1, sizeof(arr));   // fills with -1 (0xFF bytes) — safe for -1
+memset(arr, 0x3f, sizeof(arr)); // fills each byte with 0x3f → arr[i] = 0x3f3f3f3f ≈ 1e9
+// NEVER use memset to set arbitrary int values like 5 — it sets bytes, not ints!
+
+// __int128 (no cin/cout — print manually):
+__int128 big = (__int128)1e36;
+auto print128 = [](auto x) {
+    if (x < 0) { cout << '-'; x = -x; }
+    if (x > 9) print128(x / 10);
+    cout << (char)('0' + x % 10);
+};
+
+// bitset — fast for set operations over large fixed-size domains:
+bitset<100001> sieve;
+sieve.set();           // all 1s
+sieve.reset(0); sieve.reset(1);
+sieve.count();         // number of set bits
+sieve[i];              // access bit i
+(a & b).count();       // count elements in intersection of two bitsets
+```
+
+---
+
+### 7.7 PBDS ordered_set (Policy-Based)
+
+> An augmented Red-Black Tree that supports **order statistics** — find k-th element or rank of an element — both in O(log n).
 
 ```cpp
 #include <ext/pb_ds/assoc_container.hpp>
 #include <ext/pb_ds/tree_policy.hpp>
 using namespace __gnu_pbds;
-typedef tree<int, null_type, less<int>, rb_tree_tag, tree_order_statistics_node_update> ordered_set;
+typedef tree<int, null_type, less<int>, rb_tree_tag,
+             tree_order_statistics_node_update> ordered_set;
 
 ordered_set os;
-os.order_of_key(x);     // count of elements < x
-*os.find_by_order(k);   // k-th smallest (0-indexed)
+os.insert(3); os.insert(1); os.insert(5); os.insert(2);
+
+os.order_of_key(3);     // → 2  (count of elements strictly < 3: {1, 2})
+os.order_of_key(6);     // → 4  (all elements are < 6)
+*os.find_by_order(0);   // → 1  (0-indexed: smallest)
+*os.find_by_order(2);   // → 3  (2nd index: 3rd smallest)
+
+// Supports set operations (lower_bound, upper_bound, etc.) like std::set
+os.erase(3);
+os.find(5);  // like set::find
+
+// For DUPLICATES — use pair<int,int> with a unique second key:
+ordered_set<pair<int,int>> os2;
+int uid = 0;
+os2.insert({val, uid++});  // unique second element prevents collisions
+// Now order_of_key({val, 0}) = count of elements with value < val
 ```
 
-> **⚠️ Trap:** GNU G++ only. Verify OA platform supports `<ext/...>` headers.
+> **⚠️ Trap:** Only works with GNU G++ (usually fine on Codeforces/CSES; verify for HackerRank/custom OA judges). Have a Fenwick-over-compressed-ranks fallback.
 
 ---
 
-### 7.7 Lambda Quick Reference
+### 7.8 Lambda & Functional Patterns
 
 ```cpp
-auto f = [](int x) { return x * 2; };
-auto g = [&](int x) { return x + capturedVar; };  // by reference
-// Recursive lambda:
-auto rec = [&](auto&& self, int n) -> int {
-    return n <= 1 ? 1 : n * self(self, n - 1);
+// Basic lambda:
+auto square = [](int x) { return x * x; };
+
+// Capture by reference [&] — can modify outer variables:
+int total = 0;
+for_each(v.begin(), v.end(), [&](int x){ total += x; });
+
+// Capture by value [=] — read-only snapshot:
+auto adder = [offset = 10](int x) { return x + offset; };  // capture with initializer
+
+// Generic lambda (C++14) — works on any type:
+auto printPair = [](const auto& p) { cout << p.first << ' ' << p.second << '\n'; };
+
+// Recursive lambda (two ways):
+// Way 1 — pass self explicitly:
+auto dfs = [&](auto&& self, int u, int parent) -> void {
+    visited[u] = true;
+    for (int v : adj[u]) if (v != parent) self(self, v, u);
 };
+dfs(dfs, 0, -1);
+
+// Way 2 — std::function (slower due to type erasure, but cleaner):
+function<int(int)> fib = [&](int n) -> int {
+    return n < 2 ? n : fib(n-1) + fib(n-2);
+};
+
+// Lambda as comparator in sort:
+vector<string> words;
+sort(words.begin(), words.end(),
+    [](const string& a, const string& b){ return a.size() < b.size(); });
+
+// Lambda in transform:
+vector<int> squared(n);
+transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 ```
 
 ---
