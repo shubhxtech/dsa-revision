@@ -1000,13 +1000,13 @@ LCA(4, 3):
 const int LOG = 20;   // supports trees up to 2^20 ≈ 1M nodes
 const int MAXN = 1e5 + 5;
 
-int up[LOG][MAXN];   // up[k][v] = 2^k-th ancestor of v
+int up[MAXN][LOG];   // up[v][k] = 2^k-th ancestor of v
 int dep[MAXN];       // depth of each node
 vector<int> adj[MAXN];
 
 // Step 1: fill direct parents via DFS
 void dfsLCA(int node, int par) {
-    up[0][node] = par;  // direct parent (root's parent = itself)
+    up[node][0] = par;  // direct parent (root's parent = itself)
     for (int i = 0; i < adj[node].size(); i++) {
         int child = adj[node][i];
         if (child != par) {
@@ -1021,7 +1021,7 @@ void buildLCA(int n) {
     // Step 2: build binary lifting table
     for (int k = 1; k < LOG; k++)
         for (int v = 0; v < n; v++)
-            up[k][v] = up[k-1][up[k-1][v]];
+            up[v][k] = up[up[v][k-1]][k-1];
 }
 
 // Step 3: LCA query in O(log n)
@@ -1031,18 +1031,18 @@ int lca(int u, int v) {
     // Lift u up to the same depth as v
     int diff = dep[u] - dep[v];
     for (int k = 0; k < LOG; k++)
-        if ((diff >> k) & 1) u = up[k][u];
+        if ((diff >> k) & 1) u = up[u][k];
 
     if (u == v) return u;  // v was an ancestor of u
 
     // Binary-lift both until they are just below the LCA
     for (int k = LOG - 1; k >= 0; k--)
-        if (up[k][u] != up[k][v]) {
-            u = up[k][u];
-            v = up[k][v];
+        if (up[u][k] != up[v][k]) {
+            u = up[u][k];
+            v = up[v][k];
         }
 
-    return up[0][u];  // one step above = LCA
+    return up[u][0];  // one step above = LCA
 }
 ```
 
