@@ -1082,6 +1082,8 @@ void dfs(int u, int p) {
     tout[u] = timer - 1;       // record exit time (last position in subtree)
 }
 
+// Self Note: timer - 1 is done bcoz tout represent the time at which the subtree was done, we after assigning timer always increases it so that represent next unnassigned time slot bt we want when it was done so timer-1
+
 // After dfs: subtree of v = flat array range [tin[v], tout[v]]
 // This means any subtree query becomes a range query on the flat array!
 
