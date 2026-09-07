@@ -594,30 +594,34 @@ From 0:
 ```
 
 ```cpp
-vector<long long> dijkstra(int src, int n, vector<vector<pair<int,int>>>& adj) {
-    vector<long long> dist(n, LLONG_MAX);
+// adj[u] = list of {neighbor, weight}
+vector<pair<int,int>> adj[MAXN];
+vector<long long> dist(MAXN, 1e18);
+
+void dijkstra(int src) {
     priority_queue<pair<long long,int>,
                    vector<pair<long long,int>>,
-                   greater<>> pq;  // min-heap: {dist, node}
+                   greater<pair<long long,int>>> pq;  // min-heap: {dist, node}
 
     dist[src] = 0;
     pq.push({0, src});
 
     while (!pq.empty()) {
-        auto [d, u] = pq.top();
+        long long d = pq.top().first;
+        int u = pq.top().second;
         pq.pop();
 
         if (d > dist[u]) continue;  // stale entry — already found shorter path
 
-        for (auto [v, w] : adj[u]) {
+        for (int i = 0; i < adj[u].size(); i++) {
+            int v = adj[u][i].first;
+            int w = adj[u][i].second;
             if (dist[u] + w < dist[v]) {
                 dist[v] = dist[u] + w;
                 pq.push({dist[v], v});
             }
         }
     }
-
-    return dist;
 }
 ```
 
@@ -650,25 +654,28 @@ Detect: if dist still decreases after n-1 passes → negative cycle exists.
 ```
 
 ```cpp
-bool bellmanFord(int n, int src, vector<array<int,3>>& edges, vector<long long>& dist) {
-    dist.assign(n, LLONG_MAX);
+// edges[i] = {u, v, weight}
+bool bellmanFord(int n, int src, vector<array<int,3>>& edges) {
+    vector<long long> dist(n, 1e18);
     dist[src] = 0;
 
     // n-1 passes: shortest path can have at most n-1 edges
     for (int i = 0; i < n - 1; i++) {
-        for (auto& [u, v, w] : edges) {
-            if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])
+        for (int j = 0; j < edges.size(); j++) {
+            int u = edges[j][0], v = edges[j][1], w = edges[j][2];
+            if (dist[u] != (long long)1e18 && dist[u] + w < dist[v])
                 dist[v] = dist[u] + w;
         }
     }
 
     // n-th pass: if any edge still relaxes → negative cycle exists
-    for (auto& [u, v, w] : edges) {
-        if (dist[u] != LLONG_MAX && dist[u] + w < dist[v])
-            return false;
+    for (int j = 0; j < edges.size(); j++) {
+        int u = edges[j][0], v = edges[j][1], w = edges[j][2];
+        if (dist[u] != (long long)1e18 && dist[u] + w < dist[v])
+            return false;  // negative cycle detected
     }
 
-    return true;  // true = no negative cycle
+    return true;  // no negative cycle
 }
 ```
 
@@ -786,31 +793,35 @@ Kruskal: sort edges by weight, greedily add if no cycle (DSU check).
 
 ```cpp
 // --- Kruskal (sort edges + DSU) --- O(E log E)
-sort(edges.begin(), edges.end());  // edges stored as {weight, u, v}
+// edges stored as {weight, u, v}
+sort(edges.begin(), edges.end());
 DSU dsu(n);
-long long cost = 0;
-for (auto& [w, u, v] : edges) {
+long long mstCost = 0;
+for (int i = 0; i < edges.size(); i++) {
+    int w = edges[i][0], u = edges[i][1], v = edges[i][2];
     if (dsu.unite(u, v))
-        cost += w;  // add edge only if it doesn't create a cycle
+        mstCost += w;  // add edge only if it doesn't create a cycle
 }
 
 // --- Prim (min-heap, better for dense graphs) --- O(E log V)
 vector<bool> inMST(n, false);
 priority_queue<pair<int,int>,
                vector<pair<int,int>>,
-               greater<>> pq;  // min-heap: {edge_weight, node}
+               greater<pair<int,int>>> pq;  // min-heap: {edge_weight, node}
 pq.push({0, 0});
-long long mstCost = 0;
+long long primCost = 0;
 
 while (!pq.empty()) {
-    auto [w, u] = pq.top();
+    int w = pq.top().first;
+    int u = pq.top().second;
     pq.pop();
     if (inMST[u]) continue;  // skip if already in MST
     inMST[u] = true;
-    mstCost += w;
-    for (auto [v, wt] : adj[u])
-        if (!inMST[v])
-            pq.push({wt, v});
+    primCost += w;
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i].first, wt = adj[u][i].second;
+        if (!inMST[v]) pq.push({wt, v});
+    }
 }
 ```
 
@@ -871,26 +882,27 @@ bool hasCycle = ((int)order.size() != n);  // not all nodes processed → cycle 
 **DFS-based toposort** — push to stack on post-order exit, then reverse:
 ```cpp
 vector<int> color(n, 0);  // 0=unvisited, 1=in-stack (gray), 2=done (black)
-vector<int> order;
+vector<int> topoOrder;
 bool hasCycle = false;
 
-function<void(int)> dfs = [&](int u) {
+void dfsTopo(int u) {
     color[u] = 1;  // mark gray: currently on the DFS path
-    for (int v : adj[u]) {
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i];
         if (color[v] == 1) {          // back edge → cycle!
             hasCycle = true;
             return;
         }
-        if (color[v] == 0) dfs(v);   // unvisited → explore
+        if (color[v] == 0) dfsTopo(v);  // unvisited → explore
     }
     color[u] = 2;                    // mark black: fully processed
-    order.push_back(u);              // push AFTER all descendants
-};
+    topoOrder.push_back(u);          // push AFTER all descendants
+}
 
 for (int i = 0; i < n; i++)
-    if (color[i] == 0) dfs(i);
+    if (color[i] == 0) dfsTopo(i);
 
-reverse(order.begin(), order.end());  // reverse post-order = topological order
+reverse(topoOrder.begin(), topoOrder.end());  // reverse post-order = topological order
 ```
 
 | | Kahn's (BFS) | DFS-based |
@@ -931,17 +943,18 @@ Example directed cycle: A→B→C→A
 vector<int> color(n, 0);  // 0=white (unseen), 1=gray (on path), 2=black (done)
 bool hasCycle = false;
 
-function<void(int)> dfs = [&](int u) {
+void dfsCycle(int u) {
     color[u] = 1;  // entering node: mark gray
-    for (int v : adj[u]) {
-        if (color[v] == 1) {        // neighbor is on current path → cycle!
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i];
+        if (color[v] == 1) {           // neighbor is on current path → cycle!
             hasCycle = true;
             return;
         }
-        if (color[v] == 0) dfs(v); // unvisited → recurse
+        if (color[v] == 0) dfsCycle(v); // unvisited → recurse
     }
     color[u] = 2;  // leaving node: mark black (all its descendants are done)
-};
+}
 ```
 
 **🔗 Practice Problems:**
@@ -984,34 +997,39 @@ LCA(4, 3):
 ```
 
 ```cpp
-const int LOG = 20;  // supports trees up to 2^20 ≈ 1M nodes
-vector<vector<int>> up(LOG, vector<int>(n, 0));
-vector<int> depth(n, 0);
+const int LOG = 20;   // supports trees up to 2^20 ≈ 1M nodes
+const int MAXN = 1e5 + 5;
+
+int up[LOG][MAXN];   // up[k][v] = 2^k-th ancestor of v
+int dep[MAXN];       // depth of each node
+vector<int> adj[MAXN];
 
 // Step 1: fill direct parents via DFS
-function<void(int, int)> dfs = [&](int u, int p) {
-    up[0][u] = p;  // direct parent (root's parent = itself)
-    for (int v : adj[u]) {
-        if (v != p) {
-            depth[v] = depth[u] + 1;
-            dfs(v, u);
+void dfsLCA(int node, int par) {
+    up[0][node] = par;  // direct parent (root's parent = itself)
+    for (int i = 0; i < adj[node].size(); i++) {
+        int child = adj[node][i];
+        if (child != par) {
+            dep[child] = dep[node] + 1;
+            dfsLCA(child, node);
         }
     }
-};
-dfs(0, 0);
+}
 
-// Step 2: build binary lifting table
-// up[k][v] = 2^k-th ancestor of v
-for (int k = 1; k < LOG; k++)
-    for (int v = 0; v < n; v++)
-        up[k][v] = up[k-1][up[k-1][v]];
+void buildLCA(int n) {
+    dfsLCA(0, 0);  // root = 0, root's parent = itself
+    // Step 2: build binary lifting table
+    for (int k = 1; k < LOG; k++)
+        for (int v = 0; v < n; v++)
+            up[k][v] = up[k-1][up[k-1][v]];
+}
 
 // Step 3: LCA query in O(log n)
-auto lca = [&](int u, int v) -> int {
-    if (depth[u] < depth[v]) swap(u, v);  // ensure u is deeper
+int lca(int u, int v) {
+    if (dep[u] < dep[v]) swap(u, v);  // ensure u is deeper
 
     // Lift u up to the same depth as v
-    int diff = depth[u] - depth[v];
+    int diff = dep[u] - dep[v];
     for (int k = 0; k < LOG; k++)
         if ((diff >> k) & 1) u = up[k][u];
 
@@ -1025,7 +1043,7 @@ auto lca = [&](int u, int v) -> int {
         }
 
     return up[0][u];  // one step above = LCA
-};
+}
 ```
 
 **🔗 Practice Problems:**
@@ -1135,32 +1153,40 @@ Condensed DAG: SCC1 → SCC2
 2. DFS on the **transposed** (reversed) graph, in stack-pop order. Each DFS tree is one SCC.
 
 ```cpp
-// --- Pass 1: DFS original graph, record finish order ---
-vector<int> order;  // nodes in finish order (last-finished = most "source-like")
-vector<bool> visited(n, false);
+// adj[]  = original graph,  radj[] = transposed (reversed) graph
+vector<int> adj[MAXN], radj[MAXN];
+vector<int> finishOrder;   // nodes in finish order
+vector<int> comp(MAXN, -1); // comp[u] = SCC id of node u
+bool visited[MAXN];
 
-function<void(int)> dfs1 = [&](int u) {
+// --- Pass 1: DFS original graph, record finish order ---
+void dfs1(int u) {
     visited[u] = true;
-    for (int v : adj[u])
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i];
         if (!visited[v]) dfs1(v);
-    order.push_back(u);  // push AFTER all descendants → finish order
-};
+    }
+    finishOrder.push_back(u);  // push AFTER all descendants → finish order
+}
+
+// --- Pass 2: DFS transposed graph, label SCC ---
+void dfs2(int u, int c) {
+    comp[u] = c;
+    for (int i = 0; i < radj[u].size(); i++) {
+        int v = radj[u][i];
+        if (comp[v] == -1) dfs2(v, c);
+    }
+}
+
+// Main Kosaraju logic:
 for (int i = 0; i < n; i++)
     if (!visited[i]) dfs1(i);
 
-// --- Pass 2: DFS transposed graph in reverse finish order ---
-vector<int> comp(n, -1);  // comp[u] = SCC id of node u
 int numSCC = 0;
-
-function<void(int, int)> dfs2 = [&](int u, int c) {
-    comp[u] = c;
-    for (int v : radj[u])  // radj = reversed/transposed adjacency list
-        if (comp[v] == -1) dfs2(v, c);
-};
-
 for (int i = n - 1; i >= 0; i--) {  // reverse finish order
-    if (comp[order[i]] == -1)
-        dfs2(order[i], numSCC++);
+    int u = finishOrder[i];
+    if (comp[u] == -1)
+        dfs2(u, numSCC++);
 }
 // comp[u] = which SCC node u belongs to
 // numSCC  = total number of SCCs
@@ -1268,27 +1294,31 @@ When tight=true, the state is unique to N's exact prefix — can't reuse.
 ```
 
 ```cpp
-string num = to_string(N);  // convert to digits
-int n = num.size();
-int dp[20][maxState];       // dp[pos][state] when NOT tight
-memset(dp, -1, sizeof dp);
+string num;     // digits of N
+int n;          // number of digits
+long long dp[20][100];  // dp[pos][state] when NOT tight — adjust 100 to maxState
 
-function<long long(int, bool, int)> solve =
-    [&](int pos, bool tight, int state) -> long long {
+// isValid(state): return true if state satisfies the condition
+// transition(state, d): return new state after placing digit d
+long long solve(int pos, bool tight, int state) {
     if (pos == n) return isValid(state) ? 1 : 0;  // base case
     if (!tight && dp[pos][state] != -1) return dp[pos][state];  // cached
 
     int limit = tight ? (num[pos] - '0') : 9;  // how far can we go?
     long long res = 0;
     for (int d = 0; d <= limit; d++) {
-        bool newTight = tight && (d == limit);  // still tight if d==limit
-        int newState = transition(state, d);    // update tracked quantity
+        bool newTight = tight && (d == limit);  // still tight only if we placed the limit digit
+        int newState = transition(state, d);
         res += solve(pos + 1, newTight, newState);
     }
     if (!tight) dp[pos][state] = res;  // only cache when NOT tight
     return res;
-};
-long long answer = solve(0, true, 0);  // start tight, empty state
+}
+
+// Usage in main:
+// num = to_string(N); n = num.size();
+// memset(dp, -1, sizeof(dp));
+// long long answer = solve(0, true, 0);  // start tight, state = 0
 ```
 
 > **⚠️ Trap:** **Never memoize when `tight == true`** — that result is specific to N's exact prefix and can't be reused for other numbers.
@@ -1389,34 +1419,40 @@ Answer: max(12, 10) = 12 → select {1, 4, 5}
 ```
 
 ```cpp
-pair<long long,long long> dfs(int u, int p) {  // returns {take u, skip u}
+// Returns {take, skip} for node u
+pair<long long,long long> dfsRob(int u, int par) {
     long long take = weight[u], skip = 0;
-    for (int v : adj[u]) if (v != p) {
-        auto [t, s] = dfs(v, u);
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i];
+        if (v == par) continue;
+        pair<long long,long long> res = dfsRob(v, u);
+        long long t = res.first, s = res.second;
         take += s;            // took u → must skip all children
         skip += max(t, s);    // skipped u → children can be taken or skipped
     }
     return {take, skip};
 }
-auto [t, s] = dfs(root, -1);
-long long answer = max(t, s);
+pair<long long,long long> res = dfsRob(root, -1);
+long long answer = max(res.first, res.second);
 ```
 
 **Tree DP for diameter:**
 ```cpp
-// At each node, diameter passing through u = left_height + right_height + 2
-// Return: max height of subtree rooted at u
-int ans = 0;
-function<int(int,int)> height = [&](int u, int p) -> int {
+// At each node, diameter through u = longest branch + 2nd longest branch
+// Returns: max height of subtree rooted at u
+int diameter = 0;
+int dfsHeight(int u, int par) {
     int h1 = 0, h2 = 0;  // two longest branches
-    for (int v : adj[u]) if (v != p) {
-        int h = height(v, u) + 1;
+    for (int i = 0; i < adj[u].size(); i++) {
+        int v = adj[u][i];
+        if (v == par) continue;
+        int h = dfsHeight(v, u) + 1;
         if (h > h1) { h2 = h1; h1 = h; }
         else if (h > h2) h2 = h;
     }
-    ans = max(ans, h1 + h2);  // diameter through u
-    return h1;  // return longest branch
-};
+    diameter = max(diameter, h1 + h2);  // update global diameter
+    return h1;  // return longest branch upward
+}
 ```
 
 **🔗 Practice Problems:**
