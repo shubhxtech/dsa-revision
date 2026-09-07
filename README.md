@@ -972,7 +972,7 @@ void dfsCycle(int u) {
 - Naïve: walk both nodes up to root, find first common → O(depth) per query → O(n) worst case → **TLE**
 - Binary Lifting: O(log n) per query after O(n log n) preprocessing.
 
-**Idea:** Precompute `up[k][v]` = the 2ᵏ-th ancestor of node v. So `up[0][v]` = parent, `up[1][v]` = grandparent, `up[2][v]` = great-great-grandparent, etc. To jump 13 steps up = jump 8 + 4 + 1 steps (binary representation of 13).
+**Idea:** Precompute `up[v][k]` = the 2ᵏ-th ancestor of node v. So `up[v][0]` = parent, `up[v][1]` = grandparent, `up[v][2]` = great-great-grandparent, etc. To jump 13 steps up = jump 8 + 4 + 1 steps (binary representation of 13).
 
 ```mermaid
 graph TD
@@ -983,17 +983,17 @@ graph TD
 ```
 
 ```
-up[0]: parent of each node
-  up[0][4]=2, up[0][5]=2, up[0][2]=1, up[0][3]=1, up[0][1]=1(root→itself)
+up[v][0]: direct parent of each node
+  up[4][0]=2, up[5][0]=2, up[2][0]=1, up[3][0]=1, up[1][0]=1(root→itself)
 
-up[1]: 2nd ancestor (parent of parent)
-  up[1][4] = up[0][up[0][4]] = up[0][2] = 1
-  up[1][5] = up[0][up[0][5]] = up[0][2] = 1
+up[v][1]: 2nd ancestor (parent of parent)
+  up[4][1] = up[up[4][0]][0] = up[2][0] = 1
+  up[5][1] = up[up[5][0]][0] = up[2][0] = 1
 
 LCA(4, 3):
   depth[4]=2, depth[3]=1 → lift 4 by 1: 4→2
   Now both at depth 1: u=2, v=3
-  up[0][2]=1, up[0][3]=1 → same → LCA = up[0][2] = 1 ✓
+  up[2][0]=1, up[3][0]=1 → same → LCA = up[2][0] = 1 ✓
 ```
 
 ```cpp
