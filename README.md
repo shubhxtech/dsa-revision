@@ -1674,7 +1674,6 @@ long long extgcd(long long a, long long b, long long& x, long long& y) {
     y = x1 - (a / b) * y1;
     return g;
 }
-```
 
 ---
 
@@ -1701,39 +1700,90 @@ x & (x - 1)               // removes lowest set bit
 
 ### 6.1 KMP (O(n+m))
 
+#### 🧠 How KMP Works
+
+**Problem:** Naïve string matching re-compares characters we already matched. KMP avoids this by precomputing a **LPS (Longest Proper Prefix which is also a Suffix)** table for the pattern — so when a mismatch happens, we know exactly how far back to roll the pattern pointer `j`, without moving the text pointer `i` backward.
+
+**Step 1 — Build the LPS table for the pattern:**
+
+```
+Pattern: A B A B C
+Index:   0 1 2 3 4
+
+lps[0] = 0  (by definition, single char has no proper prefix)
+lps[1] = 0  "AB"   → no prefix = suffix
+lps[2] = 1  "ABA"  → "A" is both prefix and suffix   → len = 1
+lps[3] = 2  "ABAB" → "AB" is both prefix and suffix  → len = 2
+lps[4] = 0  "ABABC"→ no match
+
+LPS = [0, 0, 1, 2, 0]
+```
+
+**Step 2 — Search using LPS (never move `i` backward):**
+
+```
+Text:    A B A B A B C A B
+Pattern: A B A B C
+
+i=0,j=0: A==A → i=1, j=1
+i=1,j=1: B==B → i=2, j=2
+i=2,j=2: A==A → i=3, j=3
+i=3,j=3: B==B → i=4, j=4
+i=4,j=4: A≠C  → mismatch! j = lps[3] = 2  (i stays at 4!)
+i=4,j=2: A==A → i=5, j=3
+i=5,j=3: B==B → i=6, j=4
+i=6,j=4: C==C → i=7, j=5 → j==m → MATCH at index i-j = 2 ✓
+                         → j = lps[4] = 0, continue...
+```
+
+**Key insight:** On mismatch at `j`, `lps[j-1]` is the longest prefix of the pattern that also matches the characters we've already seen in the text — so we jump `j` there instead of starting over.
+
 ```cpp
-// Build the LPS (Longest Proper Prefix which is also Suffix) table
+// Build LPS (Longest Proper Prefix which is also Suffix) table
 vector<int> computeLPS(string& pat) {
     int m = pat.size();
     vector<int> lps(m, 0);
-    int len = 0, i = 1;
+    int len = 0;  // length of current matching prefix
+    int i = 1;
     while (i < m) {
         if (pat[i] == pat[len]) {
-            lps[i++] = ++len;           // extend matching prefix
-        } else if (len) {
-            len = lps[len - 1];         // fallback using LPS itself
+            len++;
+            lps[i] = len;
+            i++;
         } else {
-            lps[i++] = 0;               // no prefix match at all
+            if (len != 0) {
+                len = lps[len - 1];  // fall back — don't increment i
+            } else {
+                lps[i] = 0;
+                i++;
+            }
         }
     }
     return lps;
 }
 
-// Search: returns all start positions (0-indexed) of pat in text
+// KMP Search: returns all starting indices (0-indexed) where pat occurs in text
 vector<int> kmpSearch(string& text, string& pat) {
+    int n = text.size(), m = pat.size();
     vector<int> lps = computeLPS(pat);
     vector<int> matches;
-    int i = 0, j = 0;  // i = text pointer, j = pattern pointer
-    while (i < (int)text.size()) {
+
+    int i = 0;  // pointer for text
+    int j = 0;  // pointer for pattern
+    while (i < n) {
         if (text[i] == pat[j]) {
-            i++; j++;
+            i++;
+            j++;
         }
-        if (j == (int)pat.size()) {
-            matches.push_back(i - j);  // match found at position i-j
-            j = lps[j - 1];            // look for next match
-        } else if (i < (int)text.size() && text[i] != pat[j]) {
-            if (j) j = lps[j - 1];    // use LPS to avoid re-comparing
-            else   i++;                // no prefix match, move text pointer
+        if (j == m) {
+            matches.push_back(i - j);  // match found starting at index i - j
+            j = lps[j - 1];            // shift pattern to look for next match
+        } else if (i < n && text[i] != pat[j]) {
+            if (j != 0) {
+                j = lps[j - 1];  // use LPS to skip re-comparison
+            } else {
+                i++;             // no prefix match at all, move text pointer
+            }
         }
     }
     return matches;
