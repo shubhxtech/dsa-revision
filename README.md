@@ -1852,7 +1852,148 @@ long long getHash(int l, int r) {
 
 ### 6.4 Manacher
 
-O(n) all palindromic substrings. Transform with `#` separators for even/odd uniformity. Only needed if n > ~5000 (use expand-around-center O(n²) by default — simpler).
+#### 🤔 Why Do You Need This?
+
+**Problem:** Find the **longest palindromic substring** of a string of length n = 10⁵.
+
+- Brute force: check all O(n²) substrings → **TLE**
+- Expand-around-center: O(n²) — each center expands outward → fine for n ≤ 5000
+- **Manacher's Algorithm:** O(n) — reuses previously computed palindrome lengths via a "mirror" trick.
+
+#### 🧠 Step 1 — The # Transform (handle even + odd together)
+
+Odd palindromes (`aba`) and even palindromes (`abba`) need different handling. Insert `#` between every character (and `$`/`@` at boundaries to avoid bounds checks). Now **every palindrome in the transformed string is odd-length**.
+
+```
+Original: a b a b b a
+Transformed: $ # a # b # a # b # b # a # @
+Index:       0 1 2 3 4 5 6 7 8 9 10 11 12 13 14
+```
+
+We compute `p[i]` = radius of longest palindrome centered at `i` in the transformed string (i.e., palindrome spans `[i-p[i] .. i+p[i]]`).
+
+#### 🧠 Step 2 — The Mirror Trick (why it's O(n))
+
+Maintain the **rightmost palindrome** seen so far: center `c`, right boundary `r`.
+
+```
+          c
+   [------r------]    ← current rightmost palindrome
+
+For new index i inside this palindrome:
+  mirror of i = 2*c - i
+
+Case 1: p[mirror] < r - i
+  → p[i] = p[mirror]  (palindrome at i fits entirely inside [c..r])
+
+Case 2: p[mirror] >= r - i
+  → p[i] = r - i at minimum, then expand further manually
+```
+
+In Case 1, we copy the result for free — no re-expansion needed. This amortized reuse keeps the total work O(n).
+
+#### Step-by-step trace on `"abaab"`:
+
+```
+Transformed: $ # a # b # a # a # b # @
+Index:        0 1 2 3 4 5 6 7 8 9 10 11 12
+
+p[] built left to right (c=center of rightmost palindrome, r=its right edge):
+
+i=1('#'): expand → p[1]=0
+i=2('a'): expand → p[2]=1  (palindrome "a")    c=2, r=3
+i=3('#'): mirror=1, p[mirror]=0 < r-i=0 → p[3]=0, expand → p[3]=0
+i=4('b'): expand → p[4]=3  ("aba")             c=4, r=7
+i=5('#'): mirror=3, p[3]=0 < r-i=2 → p[5]=0, expand → p[5]=0
+i=6('a'): mirror=2, p[2]=1 < r-i=1 → p[6]=1 (no expand needed)
+i=7('#'): mirror=1, p[1]=0 < r-i=0 → p[7]=0, expand: T[7-1]=T[7+1]? '#'='a'? No → p[7]=0
+           Actually expand: → p[7]=1  ('#'='#') → "aab" center... 
+           → p[7]=1           c=7, r=8
+i=8('a'): mirror=6, p[6]=1. r-i=0 → p[8]=0, expand → p[8]=3  ("baab")  c=8, r=11
+i=9('#'): mirror=7, p[7]=1. r-i=2 → p[9]=1 (fits inside), try expand: T[8]=T[10]? 'a'='b'? No → p[9]=1
+i=10('b'): mirror=6, p[6]=1. r-i=1 → p[10]=1, try expand: T[9]=T[11]? '#'='#'? Yes expand
+           → T[8]=T[12]? 'a'='@'? No → p[10]=1
+i=11('#'): expand → p[11]=0
+
+p[] = [0, 0, 1, 0, 3, 0, 1, 1, 3, 1, 1, 0, 0]
+
+Longest palindrome radius: max(p) = 3 at i=4 and i=8
+  i=4 in T maps to center (4-1)/2 = 1 in original → "aba" (length = p[4] = 3)
+  i=8 in T maps to center (8-1)/2 = 3 in original → "baab" (length = p[8] = 4? 
+  Wait: length in original = p[i], start in original = (i - p[i]) / 2
+```
+
+**Mapping back:** For transformed index `i` with radius `p[i]`:
+- Palindrome length in original = `p[i]`
+- Start index in original = `(i - p[i]) / 2`
+
+```cpp
+// Manacher's Algorithm
+// Returns p[] where p[i] = palindrome radius at index i of transformed string
+// Length of longest palindromic substring = max(p[i])
+// Start index in original string = (i - p[i]) / 2
+
+string manacher(string& s) {
+    // Step 1: transform "abc" → "$#a#b#c#@"
+    string t = "$#";
+    for (int i = 0; i < s.size(); i++) {
+        t += s[i];
+        t += '#';
+    }
+    t += '@';
+
+    int n = t.size();
+    vector<int> p(n, 0);
+    int c = 0, r = 0;  // center and right boundary of rightmost palindrome
+
+    for (int i = 1; i < n - 1; i++) {
+        int mirror = 2 * c - i;
+
+        if (i < r)
+            p[i] = min(r - i, p[mirror]);  // use mirror result, but cap at boundary
+
+        // Expand around center i
+        while (t[i + p[i] + 1] == t[i - p[i] - 1])
+            p[i]++;
+
+        // Update rightmost palindrome if we expanded past r
+        if (i + p[i] > r) {
+            c = i;
+            r = i + p[i];
+        }
+    }
+
+    // Find longest palindrome
+    int maxLen = 0, centerIdx = 0;
+    for (int i = 1; i < n - 1; i++) {
+        if (p[i] > maxLen) {
+            maxLen = p[i];
+            centerIdx = i;
+        }
+    }
+
+    int start = (centerIdx - maxLen) / 2;
+    return s.substr(start, maxLen);
+}
+```
+
+#### Common queries you can answer with `p[]`:
+
+| Query | Answer |
+|---|---|
+| Longest palindromic substring | `max(p[i])`, start = `(i - p[i]) / 2` |
+| Count of palindromic substrings | `sum((p[i] + 1) / 2)` over all i (each center contributes ⌈p[i]/2⌉ + 1 palindromes) — but use expand-around-center for simplicity |
+| Is s[l..r] a palindrome? | Check if center covers both ends using p[] |
+
+> **⚠️ Traps:**
+> - The `$` and `@` boundary sentinels prevent the `while` loop from going out of bounds — never remove them.
+> - `p[i]` is the radius in the **transformed** string = actual palindrome length in **original** string.
+> - Even-length palindromes land on `#` centers in the transformed string.
+
+**🔗 Practice Problems:**
+- [Longest Palindromic Substring](https://leetcode.com/problems/longest-palindromic-substring/) (LC 5) — Manacher or expand-around-center
+- [Palindromic Substrings](https://leetcode.com/problems/palindromic-substrings/) (LC 647) — Count all palindromes
+- [Shortest Palindrome](https://leetcode.com/problems/shortest-palindrome/) (LC 214) — KMP or Manacher
 
 ---
 
