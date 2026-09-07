@@ -1,28 +1,29 @@
-# 🧠 Last-Minute DSA + STL Revision
+# Last-Minute DSA + STL Revision
 
 > **Who this is for:** Someone who has studied DSA before and needs fast recall — not first-time learners.
 > Each section leads with a *mental model / visual intuition* first, then code, then traps.
 
 ---
 
-## 📖 Table of Contents
+## Table of Contents
 
 | # | Section |
 |---|---------|
-| 1 | [⚡ Recognition Triggers](#1--recognition-triggers) |
-| 2 | [🏗️ Data Structures & Techniques](#2--data-structures--techniques) |
-| 3 | [🗺️ Graph Algorithms](#3--graph-algorithms) |
-| 4 | [🧩 Dynamic Programming Patterns](#4--dynamic-programming-patterns) |
-| 5 | [🔢 Math Tricks](#5--math-tricks) |
-| 6 | [🔤 String Algorithms](#6--string-algorithms) |
-| 7 | [🛠️ STL Cheat Sheet](#7--stl-cheat-sheet) |
-| 8 | [⚖️ Confused-Technique Comparison Tables](#8--confused-technique-comparison-tables) |
-| 9 | [💣 Common OA Traps](#9--common-oa-traps) |
-| 10 | [🏁 Final 15–30 Minute Skim](#10--final-1530-minute-skim) |
+| 1 | [Recognition Triggers](#1-recognition-triggers) |
+| 2 | [Data Structures & Techniques](#2-data-structures--techniques) |
+| 3 | [Graph Algorithms](#3-graph-algorithms) |
+| 4 | [Dynamic Programming Patterns](#4-dynamic-programming-patterns) |
+| 5 | [Math Tricks](#5-math-tricks) |
+| 6 | [String Algorithms](#6-string-algorithms) |
+| 7 | [STL Cheat Sheet](#7-stl-cheat-sheet) |
+| 8 | [Common Coding Patterns](#8-common-coding-patterns) |
+| 9 | [Confused-Technique Comparison Tables](#9-confused-technique-comparison-tables) |
+| 10 | [Common OA Traps](#10-common-oa-traps) |
+| 11 | [Final 15–30 Minute Skim](#11-final-1530-minute-skim) |
 
 ---
 
-## 1. ⚡ Recognition Triggers
+## 1. Recognition Triggers
 
 > **Read this first. This is your mental lookup table.**
 
@@ -49,6 +50,7 @@
 | "Palindromic substrings" | Manacher / expand-around-center / hashing |
 | "XOR of subarray/pair maximization" | Trie on bits |
 | "kth smallest / order statistics dynamically" | ordered_set (PBDS) or Fenwick over ranks |
+| "Top-K elements sum / dynamic Top-K largest in stream" | Min-heap of size K (pop min when size > K, subtract from sum) |
 | "Median of stream" | Two heaps |
 | "Repeated identical subtree/array/state queries" | Memoize with map, or hashing states |
 | "Tree + subtree sum/count queries" | Euler tour + Fenwick |
@@ -60,7 +62,7 @@
 
 ---
 
-## 2. 🏗️ Data Structures & Techniques
+## 2. Data Structures & Techniques
 
 ---
 
@@ -568,7 +570,7 @@ while (lo <= hi) {
 
 ---
 
-## 3. 🗺️ Graph Algorithms
+## 3. Graph Algorithms
 
 ---
 
@@ -1170,7 +1172,7 @@ for (int i = n - 1; i >= 0; i--) {  // reverse finish order
 
 ---
 
-## 4. 🧩 Dynamic Programming Patterns
+## 4. Dynamic Programming Patterns
 
 ---
 
@@ -1521,7 +1523,7 @@ for (int len = 1; len <= n; len++)          // length of interval
 
 ---
 
-## 5. 🔢 Math Tricks
+## 5. Math Tricks
 
 ---
 
@@ -1657,7 +1659,7 @@ x & (x - 1)               // removes lowest set bit
 
 ---
 
-## 6. 🔤 String Algorithms
+## 6. String Algorithms
 
 ---
 
@@ -1768,7 +1770,7 @@ O(n) all palindromic substrings. Transform with `#` separators for even/odd unif
 
 ---
 
-## 7. 🛠️ STL Cheat Sheet
+## 7. STL Cheat Sheet
 
 > 💡 **Philosophy:** STL is powerful but has sharp edges. This section explains *what* each function actually returns, *why* to use it, and the **non-trivial patterns** you'll actually need in contests and interviews.
 
@@ -2166,7 +2168,243 @@ transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 
 ---
 
-## 8. ⚖️ Confused-Technique Comparison Tables
+## 8. Common Coding Patterns
+
+---
+
+### 8.1 Running Top-K Elements Sum (Min-Heap of Size K)
+
+#### 🧠 Mental Model: The Min-Heap Paradox for Top-K Largest
+
+The most common trap in "top $K$ largest elements" or "running sum of top $K$ elements" is instinctively reaching for a max-heap.
+- **The flaw with Max-Heap:** A max-heap keeps the *largest* element at the top. If the heap grows larger than $K$, you cannot easily evict the *smallest* element among those candidates without popping everything!
+- **The Min-Heap Insight:**
+  - If we want to maintain the $K$ **largest** elements, the only element in danger of being kicked out when a new candidate arrives is the **smallest** of those $K$.
+  - A **min-heap** (`priority_queue<T, vector<T>, greater<T>>`) keeps that weakest candidate right at `pq.top()` in $O(1)$.
+  - When a new element $x$ arrives: push $x$ and add $x$ to `sum`.
+  - The moment the heap exceeds size $K$ (`pq.size() > k`), the absolute smallest element among the $K+1$ candidates is at `pq.top()`.
+  - **Evict it:** subtract `pq.top()` from `sum` and `pq.pop()`.
+  - **Result:** You dynamically maintain the exact sum of the $K$ largest elements in $O(\log K)$ per update instead of $O(N \log N)$ sorting!
+
+```
+Stream: [4, 1, 7, 2, 8]  with  K = 3 (Keep sum of 3 largest elements)
+
+Incoming:  Action:               Min-Heap (size <= 3):    pq.top() (min):   Sum of Top 3:
+-----------------------------------------------------------------------------------------
+4          push(4), sum += 4     [4]                      4                 4 (size < 3)
+1          push(1), sum += 1     [1, 4]                   1                 5 (size < 3)
+7          push(7), sum += 7     [1, 4, 7]                1                 12 (size == 3)
+2          push(2), sum += 2     [1, 2, 4, 7] (size 4 > 3)
+           pop(1),  sum -= 1     [2, 4, 7]                2                 13 (size == 3)
+8          push(8), sum += 8     [2, 4, 7, 8] (size 4 > 3)
+           pop(2),  sum -= 2     [4, 7, 8]                4                 19 (size == 3)
+```
+
+**When to use:**
+- Dynamic / streaming top-$K$ sum or $k$-th largest element.
+- "Select $K$ elements to maximize a metric" under multi-criteria constraints.
+- Sliding window / sweep-line where you want the largest $K$ values.
+
+**Complexity:** Time: $O(N \log K)$, Space: $O(K)$. (Drastic improvement over $O(N \log N)$ full sort when $K \ll N$).
+
+```cpp
+// Running sum of the top K LARGEST elements in a stream:
+priority_queue<long long, vector<long long>, greater<long long>> min_pq; // min-heap
+long long top_k_sum = 0;
+
+for (long long x : nums) {
+    min_pq.push(x);
+    top_k_sum += x;
+
+    // Queue exceeded K elements -> evict the smallest among them
+    if ((int)min_pq.size() > k) {
+        top_k_sum -= min_pq.top();
+        min_pq.pop();
+    }
+
+    // When size == k, top_k_sum is guaranteed to be the sum of the k largest elements
+    if ((int)min_pq.size() == k) {
+        // min_pq.top() is the k-th largest element seen so far
+        // top_k_sum is the exact sum of top k largest elements
+    }
+}
+```
+
+#### 🔄 Dual Pattern: Running Top-K SMALLEST Elements Sum
+If the problem asks for the sum of the $K$ **smallest** elements:
+- Use a **MAX-heap** (`priority_queue<long long> max_pq`).
+- The candidate in jeopardy of eviction is the **largest** among the smallest $K$.
+- When `max_pq.size() > k`, evict `max_pq.top()` and subtract from `sum`.
+
+```cpp
+// Running sum of the top K SMALLEST elements:
+priority_queue<long long> max_pq; // default is max-heap
+long long min_k_sum = 0;
+
+for (long long x : nums) {
+    max_pq.push(x);
+    min_k_sum += x;
+
+    if ((int)max_pq.size() > k) {
+        min_k_sum -= max_pq.top(); // evict largest of the small candidates
+        max_pq.pop();
+    }
+}
+```
+
+#### 🏆 High-Frequency OA Archetype: "Sort by Dimension 1 + Top-K Heap on Dimension 2"
+A classic LeetCode Hard / OA pattern (e.g., LC 2542, LC 857):
+- **Goal:** Maximize `min(B_chosen) * sum(A_chosen)` over $K$ selected indices.
+- **Strategy:**
+  1. Pair up `(B[i], A[i])` and sort descending by `B[i]`.
+  2. Iterate through sorted pairs. For each index $i$, `B[i]` is guaranteed to be the *minimum $B$* among all pairs seen up to $i$.
+  3. Maintain the top $K$ values of $A$ using a **min-heap of size $K$**.
+  4. When `min_pq.size() == k`, update `ans = max(ans, top_k_sum * B[i])`.
+
+```cpp
+long long maxScore(vector<int>& nums1, vector<int>& nums2, int k) {
+    int n = nums1.size();
+    vector<pair<int,int>> pairs(n);
+    for (int i = 0; i < n; i++) pairs[i] = {nums2[i], nums1[i]};
+
+    // Sort descending by nums2 so pairs[i].first is always the minimum of current window
+    sort(pairs.rbegin(), pairs.rend());
+
+    priority_queue<long long, vector<long long>, greater<long long>> min_pq;
+    long long sum = 0, ans = 0;
+
+    for (auto& [b, a] : pairs) {
+        min_pq.push(a);
+        sum += a;
+
+        if ((int)min_pq.size() > k) {
+            sum -= min_pq.top();
+            min_pq.pop();
+        }
+
+        if ((int)min_pq.size() == k) {
+            ans = max(ans, sum * b);
+        }
+    }
+    return ans;
+}
+```
+
+> **⚠️ Traps:**
+> - **Integer Overflow:** The sum of $K$ elements easily exceeds $2 \cdot 10^9$. ALWAYS use `long long` for `top_k_sum` and the priority queue type.
+> - **Default Heap Direction:** In C++, `priority_queue<int>` is a MAX-heap. For top-$K$ largest sum, you MUST write `priority_queue<long long, vector<long long>, greater<long long>>`.
+> - **Size Gate:** If exactly $K$ elements are required, never treat `top_k_sum` as a valid answer until `pq.size() == k`.
+
+**🔗 Practice Problems:**
+- [Maximum Subsequence Score](https://leetcode.com/problems/maximum-subsequence-score/) (LC 2542) — Sort descending + Min-Heap of size K
+- [Minimum Cost to Hire K Workers](https://leetcode.com/problems/minimum-cost-to-hire-k-workers/) (LC 857) — Sort by ratio + Max-Heap of size K
+- [Course Schedule III](https://leetcode.com/problems/course-schedule-iii/) (LC 630) — Greedy earliest deadline + Max-Heap duration eviction
+- [Kth Largest Element in a Stream](https://leetcode.com/problems/kth-largest-element-in-a-stream/) (LC 703) — Direct min-heap of size K
+- [IPO](https://leetcode.com/problems/ipo/) (LC 502) — Min-heap on capital, Max-heap on profit
+
+---
+
+### 8.2 Two Heaps Pattern (Dynamic Median & Stream Partitioning)
+
+#### 🧠 Mental Model
+
+Split a dynamic stream into two balanced halves:
+- **Left Half (smaller numbers):** Max-heap `left_max` (top is maximum of lower half).
+- **Right Half (larger numbers):** Min-heap `right_min` (top is minimum of upper half).
+- **Invariant:** `left_max.size() == right_min.size()` OR `left_max.size() == right_min.size() + 1`.
+
+```
+Lower Half (Max-Heap)              Upper Half (Min-Heap)
+   [ 1, 3, 5 ]    <--- Median --->   [ 7, 9, 11 ]
+        ↑                                 ↑
+   left_max.top() = 5                right_min.top() = 7
+```
+
+**Complexity:** Add element: $O(\log N)$, Find Median: $O(1)$, Space: $O(N)$.
+
+```cpp
+class MedianFinder {
+    priority_queue<int> left_max;                              // lower half
+    priority_queue<int, vector<int>, greater<int>> right_min;  // upper half
+
+public:
+    void addNum(int num) {
+        // 1. Push to left half
+        left_max.push(num);
+
+        // 2. Balance value invariant: max(left) <= min(right)
+        right_min.push(left_max.top());
+        left_max.pop();
+
+        // 3. Balance size invariant: left_max size == right_min size or +1
+        if (left_max.size() < right_min.size()) {
+            left_max.push(right_min.top());
+            right_min.pop();
+        }
+    }
+
+    double findMedian() {
+        if (left_max.size() > right_min.size())
+            return left_max.top();
+        return (left_max.top() + right_min.top()) / 2.0;
+    }
+};
+```
+
+> **⚠️ Traps:**
+> - Division when computing even median: `(a + b) / 2.0` (ensure floating-point division, avoid integer truncation).
+> - For sliding window median, standard heaps don't support arbitrary deletion efficiently — use lazy deletion with a hash map, or `multiset` with an iterator pointing to the median.
+
+**🔗 Practice Problems:**
+- [Find Median from Data Stream](https://leetcode.com/problems/find-median-from-data-stream/) (LC 295) — Classic Two Heaps
+- [Sliding Window Median](https://leetcode.com/problems/sliding-window-median/) (LC 480) — Two Heaps with lazy removal / Multiset
+
+---
+
+### 8.3 Prefix Sum + Hash Map (Target Subarray Sum & Remainder)
+
+#### 🧠 Mental Model
+
+Any subarray sum between index $i$ and $j$ is:
+$$\text{Sum}(i \dots j) = \text{Pref}[j] - \text{Pref}[i - 1]$$
+To find a subarray where $\text{Sum}(i \dots j) == k$:
+$$\text{Pref}[j] - \text{Pref}[i - 1] = k \iff \text{Pref}[i - 1] = \text{Pref}[j] - k$$
+As you iterate $j$ from left to right, check if $\text{Pref}[j] - k$ has already been recorded in a hash map!
+
+```cpp
+// Count subarrays with sum equal to k:
+int subarraySum(vector<int>& nums, int k) {
+    unordered_map<long long, int> pref_count;
+    pref_count[0] = 1; // Base case: empty prefix has sum 0
+
+    long long curr_sum = 0;
+    int count = 0;
+
+    for (int x : nums) {
+        curr_sum += x;
+        // If (curr_sum - k) exists, those prefixes end subarrays summing to k
+        if (pref_count.count(curr_sum - k)) {
+            count += pref_count[curr_sum - k];
+        }
+        pref_count[curr_sum]++;
+    }
+    return count;
+}
+```
+
+> **⚠️ Traps:**
+> - **Never forget `pref_count[0] = 1`:** A subarray starting at index 0 requires `Pref[-1] = 0`.
+> - **Modulo Arithmetic / Divisibility:** For "subarray sum divisible by $k$", store `((curr_sum % k) + k) % k` to handle negative remainders in C++.
+> - **Longest vs Count:** If finding *longest* subarray length, store `pref_first_index` and DO NOT overwrite existing keys (keep earliest occurrence).
+
+**🔗 Practice Problems:**
+- [Subarray Sum Equals K](https://leetcode.com/problems/subarray-sum-equals-k/) (LC 560) — Prefix sum frequency map
+- [Continuous Subarray Sum](https://leetcode.com/problems/continuous-subarray-sum/) (LC 523) — Prefix sum modulo k + index map
+- [Contiguous Array](https://leetcode.com/problems/contiguous-array/) (LC 525) — Transform 0 to -1, find longest sum = 0
+
+---
+
+## 9. Confused-Technique Comparison Tables
 
 ### Shortest Path
 
@@ -2234,7 +2472,7 @@ transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 
 ---
 
-## 9. 💣 Common OA Traps
+## 10. Common OA Traps
 
 > Things that cause WA/TLE even when core logic is correct.
 
@@ -2254,7 +2492,7 @@ transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 
 ---
 
-## 10. 🏁 Final 15–30 Minute Skim
+## 11. Final 15–30 Minute Skim
 
 > **Read this section right before the OA starts.**
 
@@ -2274,6 +2512,7 @@ transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 | N ≤ 20, subsets | Bitmask DP |
 | XOR max pair/subarray | Trie on bits |
 | k-th order stat dynamically | PBDS ordered_set / Fenwick over ranks |
+| Top-K elements sum in stream | Min-heap of size K (pop min when size > K, subtract from sum) |
 
 ---
 
@@ -2283,6 +2522,7 @@ transform(v.begin(), v.end(), squared.begin(), [](int x){ return x * x; });
 lower_bound  →  first >= x     |     upper_bound  →  first > x
 Set member:   s.lower_bound(x)     NOT std::lower_bound (O(n) on set!)
 Min-heap:     priority_queue<int, vector<int>, greater<int>>
+Top-K sum:    Min-heap for K largest sum (evict min); Max-heap for K smallest sum
 Multiset:     erase(iterator) = 1 copy,  erase(value) = ALL copies
 LIS strictly increasing  → lower_bound
 LIS non-decreasing       → upper_bound
