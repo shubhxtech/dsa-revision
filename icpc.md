@@ -211,6 +211,10 @@ bool unite(int a, int b, long long w) {
 
 **Searchable tag:** https://codeforces.com/problemset?tags=dsu&order=BY_RATING_ASC
 
+**DSU learning resources (verified accessible):**
+- CF EDU DSU Course (video + graded problems): https://codeforces.com/edu/course/2/lesson/7
+- CP-Algorithms weighted DSU derivation: https://cp-algorithms.com/data_structures/disjoint_set_union.html
+
 ---
 
 ## 4. Graphs — BFS / DFS / Shortest Paths
@@ -458,10 +462,13 @@ int memo[20][2][EXTRA];
 
 | Problem | CF Link | Rating | What to practice |
 |---|---|---|---|
-| 1556D — Take a Guess | https://codeforces.com/problemset/problem/1556/D | 1700 | Bitmask + greedy |
-| 1032E — The Tyrant | https://codeforces.com/problemset/problem/1032/E | 2100 | Bitmask DP |
+| 327E — Axis Walking | https://codeforces.com/problemset/problem/327/E | 2000 | Classic bitmask DP on subsets |
+| 1209H — Moving to Berezniki | https://codeforces.com/problemset/problem/1209/H | 2500 | Bitmask DP hard |
 | 1316E — Team Building | https://codeforces.com/problemset/problem/1316/E | 2100 | Bitmask DP on DAG |
-| 1244E — Minimizing Difference | https://codeforces.com/problemset/problem/1244/E | 1900 | DP with bitmask state |
+| 1090M — Unification | https://codeforces.com/problemset/problem/1090/M | 2000 | Bitmask DP |
+| 559C — Gerald and Giant Chess | https://codeforces.com/problemset/problem/559/C | 2000 | Bitmask counting |
+
+**CF EDU Segment Tree course (video + graded problems):** https://codeforces.com/edu/course/2/lesson/4
 
 **Digit DP:**
 
@@ -723,7 +730,7 @@ long long maxXOR() {
 |---|---|---|---|
 | 1554D — Diane | https://codeforces.com/problemset/problem/1554/D | 1700 | XOR construction |
 | 1556E — Solving the Knapsack | https://codeforces.com/problemset/problem/1556/E | 1800 | XOR properties |
-| 1516E ——tion Deck | https://codeforces.com/problemset/problem/1516/E | 2100 | XOR linear basis |
+| 1336C — Kaavi and Magic Spell | https://codeforces.com/problemset/problem/1336/C | 2400 | XOR linear basis / interval DP |
 | 1625E — Bit Arranging | https://codeforces.com/problemset/problem/1625/E | 1700 | Bit manipulation |
 | 1832D — More XOR | https://codeforces.com/problemset/problem/1832/D | 1800 | XOR properties |
 | 1847D — Weak Divisor | https://codeforces.com/problemset/problem/1847/D | 1700 | Bit + math |
@@ -1118,7 +1125,14 @@ long long getHash(int l, int r) {  // [l, r] inclusive
 **ICPC India archive for virtual practice:**
 - 2025–26: https://codeforces.com/gym/106179
 - Full archive 2008–2023: https://codeforces.com/blog/entry/105000
-- ICPC India problem list: https://github.com/m-e-r-l-i-n/icpc-india
+- ICPC India problem list (all years with statements/editorials): https://github.com/m-e-r-l-i-n/icpc-india
+- ICPC India guide + format explainer: https://aryanc403.com/blog/india-icpc-2024/
+
+**What rating do you need to qualify for regionals?** (real data from past years):
+- 2022 qualifying teams: https://codeforces.com/blog/entry/106907
+- 2022–23 qualifying teams: https://codeforces.com/blog/entry/114289
+- 2023–24 qualifying teams: https://codeforces.com/blog/entry/123227
+- Asia West teams 2024: https://codeforces.com/blog/entry/126584
 
 ### How to upsolve (do this, not "read editorial and move on")
 1. **Time-box first attempt** — 30 min of genuine effort
@@ -1183,3 +1197,23 @@ Must be instant:
 ---
 
 > **Most important reminder:** The skill that separates rank 5 from rank 200 at ICPC India prelims is **not knowing more algorithms**. Look at *Collisions*, *Equations*, *Pseudo Palindrome*, *Small Indices* — none of them are "implement segment tree." They are: model the situation correctly, find the right invariant, implement carefully under time pressure. Drill the recognition reflex on real problems, not algorithm theory.
+
+---
+
+## Sources & References
+
+| Source | URL | What it's useful for |
+|---|---|---|
+| ICPC India 2025–26 prelims (Gym) | https://codeforces.com/gym/106179 | Most recent contest — practice this as a virtual contest |
+| ICPC India 2024–25 discussion | https://codeforces.com/blog/entry/136327 | Problem breakdown + community solutions |
+| ICPC India 2023–24 post-mortem | https://codeforces.com/blog/entry/136663 | Why problems failed, what bugs appeared |
+| ICPC India 2023–24 editorial | https://codeforces.com/blog/entry/136522 | Official solutions |
+| Full historical archive 2008–2023 | https://codeforces.com/blog/entry/105000 | All years with statements, editorials, mirrors |
+| GitHub archive of all India contests | https://github.com/m-e-r-l-i-n/icpc-india | Statements + solutions organized by year |
+| aryanc403 ICPC India guide | https://aryanc403.com/blog/india-icpc-2024/ | Format, eligibility, registration, selection criteria |
+| ICPC India official site | https://wc.indiaicpc.in | Current year dates, sites, registration |
+| CP-Algorithms DSU | https://cp-algorithms.com/data_structures/disjoint_set_union.html | Weighted DSU derivation |
+| CF EDU DSU course | https://codeforces.com/edu/course/2/lesson/7 | Video explanations + graded DSU problems |
+| CF EDU Segment Tree | https://codeforces.com/edu/course/2/lesson/4 | Video explanations + graded segment tree problems |
+| 2022 qualifying teams | https://codeforces.com/blog/entry/106907 | Real rating data for who qualified |
+| 2023–24 qualifying teams | https://codeforces.com/blog/entry/123227 | Real rating data for who qualified |
